@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  email             String             @unique @db.VarChar(255)
+  passwordHash      String
+  firstName         String             @db.VarChar(100)
+  lastName          String             @db.VarChar(100)
+  phone             String             @unique @db.VarChar(20)
+  role              Role
+  isEmailVerified   Boolean            @default(false)
+  refreshTokenHash  String?
+  status            UserStatus         @default(ACTIVE)
+  lastLoginAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  providerProfile   ProviderProfile?
+  verifiedDocuments ProviderDocument[]
+
+  @@index([status])
+  @@map("users")
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+model ProviderProfile {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id])
+  businessName       String             @db.VarChar(255)
+  description        String?
+  experienceYears    Int
+  profileImageUrl    String?
+  city               String             @db.VarChar(100)
+  state              String             @db.VarChar(100)
+  addressLine1       String             @db.VarChar(255)
+  addressLine2       String?            @db.VarChar(255)
+  postalCode         String             @db.VarChar(20)
+  verificationStatus VerificationStatus @default(PENDING)
+  averageRating      Decimal            @default(0) @db.Decimal(3, 2)
+  totalReviews       Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  deletedAt          DateTime?
+  documents          ProviderDocument[]
+
+  @@index([city])
+  @@index([verificationStatus])
+  @@index([userId])
+  @@map("provider_profiles")
+}
+
+enum DocumentType {
+  AADHAAR
+  PAN
+  BUSINESS_LICENSE
+  GST
+}
+
+model ProviderDocument {
+  id                 String             @id @default(uuid()) @db.Uuid
+  providerId         String             @db.Uuid
+  provider           ProviderProfile    @relation(fields: [providerId], references: [id])
+  documentType       DocumentType
+  fileUrl            String
+  verificationStatus VerificationStatus @default(PENDING)
+  rejectionReason    String?
+  uploadedAt         DateTime           @default(now())
+  verifiedAt         DateTime?
+  verifiedById       String?            @db.Uuid
+  verifiedBy         User?              @relation(fields: [verifiedById], references: [id])
+
+  @@index([providerId])
+  @@index([verificationStatus])
+  @@map("provider_documents")
+}
