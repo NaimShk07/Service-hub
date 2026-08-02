@@ -24,6 +24,77 @@ enum UserStatus {
   BLOCKED
 }
 
+enum ServiceMode {
+  AT_CUSTOMER_LOCATION
+  AT_PROVIDER_LOCATION
+  ONLINE
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum DocumentType {
+  AADHAAR
+  PAN
+  BUSINESS_LICENSE
+  GST
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  PAYMENT_FAILED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentGateway {
+  RAZORPAY
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  REMINDER
+  REVIEW_REQUEST
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum AuditAction {
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  PROVIDER_VERIFIED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+}
+
 model User {
   id                String             @id @default(uuid()) @db.Uuid
   email             String             @unique @db.VarChar(255)
@@ -41,31 +112,23 @@ model User {
   deletedAt         DateTime?
   providerProfile   ProviderProfile?
   verifiedDocuments ProviderDocument[]
+  bookings          Booking[]
+  reviews           Review[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
 
   @@index([status])
   @@map("users")
 }
 
-enum VerificationStatus {
-  PENDING
-  VERIFIED
-  REJECTED
-  SUSPENDED
-}
-
 model ProviderProfile {
   id                 String             @id @default(uuid()) @db.Uuid
-  userId             String             @unique
+  userId             String             @unique @db.Uuid
   user               User               @relation(fields: [userId], references: [id])
   businessName       String             @db.VarChar(255)
   description        String?
   experienceYears    Int
   profileImageUrl    String?
-  city               String             @db.VarChar(100)
-  state              String             @db.VarChar(100)
-  addressLine1       String             @db.VarChar(255)
-  addressLine2       String?            @db.VarChar(255)
-  postalCode         String             @db.VarChar(20)
   verificationStatus VerificationStatus @default(PENDING)
   averageRating      Decimal            @default(0) @db.Decimal(3, 2)
   totalReviews       Int                @default(0)
@@ -73,18 +136,36 @@ model ProviderProfile {
   updatedAt          DateTime           @updatedAt
   deletedAt          DateTime?
   documents          ProviderDocument[]
+  services           ProviderService[]
+  locations          ProviderLocation[]
+  availabilities     Availability[]
+  bookings           Booking[]
+  reviews            Review[]
 
-  @@index([city])
   @@index([verificationStatus])
   @@index([userId])
   @@map("provider_profiles")
 }
 
-enum DocumentType {
-  AADHAAR
-  PAN
-  BUSINESS_LICENSE
-  GST
+model ProviderLocation {
+  id           String          @id @default(uuid()) @db.Uuid
+  providerId   String          @db.Uuid
+  provider     ProviderProfile @relation(fields: [providerId], references: [id])
+  addressLine1 String          @db.VarChar(255)
+  addressLine2 String?         @db.VarChar(255)
+  city         String          @db.VarChar(100)
+  state        String          @db.VarChar(100)
+  postalCode   String          @db.VarChar(20)
+  latitude     Decimal?        @db.Decimal(10, 7)
+  longitude    Decimal?        @db.Decimal(10, 7)
+  isPrimary    Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([providerId])
+  @@index([city])
+  @@index([state])
+  @@map("provider_locations")
 }
 
 model ProviderDocument {
@@ -103,4 +184,198 @@ model ProviderDocument {
   @@index([providerId])
   @@index([verificationStatus])
   @@map("provider_documents")
+}
+
+model Category {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @unique @db.VarChar(100)
+  slug         String    @unique @db.VarChar(100)
+  icon         String?   @db.VarChar(100)
+  description  String?
+  displayOrder Int       @default(0) @db.SmallInt
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  services     Service[]
+
+  @@index([displayOrder])
+  @@map("categories")
+}
+
+model Service {
+  id              String            @id @default(uuid()) @db.Uuid
+  categoryId      String            @db.Uuid
+  category        Category          @relation(fields: [categoryId], references: [id])
+  name            String            @db.VarChar(150)
+  slug            String            @db.VarChar(150)
+  description     String?
+  serviceMode     ServiceMode
+  defaultDuration Int?
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  provider        ProviderService[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+  @@index([serviceMode])
+  @@map("services")
+}
+
+model ProviderService {
+  id              String          @id @default(uuid()) @db.Uuid
+  providerId      String          @db.Uuid
+  provider        ProviderProfile @relation(fields: [providerId], references: [id])
+  serviceId       String          @db.Uuid
+  service         Service         @relation(fields: [serviceId], references: [id])
+  price           Decimal         @db.Decimal(10, 2)
+  currency        String          @default("INR") @db.Char(3)
+  durationMinutes Int             @db.SmallInt
+  bufferMinutes   Int             @default(0) @db.SmallInt
+  description     String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  bookings        Booking[]
+
+  @@unique([providerId, serviceId])
+  @@index([providerId])
+  @@index([serviceId])
+  @@index([price])
+  @@map("provider_services")
+}
+
+model Availability {
+  id          String          @id @default(uuid()) @db.Uuid
+  providerId  String          @db.Uuid
+  provider    ProviderProfile @relation(fields: [providerId], references: [id])
+  weekday     Int             @db.SmallInt
+  startTime   DateTime        @db.Time(0)
+  endTime     DateTime        @db.Time(0)
+  breakStart  DateTime?       @db.Time(0)
+  breakEnd    DateTime?       @db.Time(0)
+  isAvailable Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([providerId, weekday])
+  @@index([providerId])
+  @@index([weekday])
+  @@map("availability")
+}
+
+model Booking {
+  id                   String          @id @default(uuid()) @db.Uuid
+  customerId           String          @db.Uuid
+  customer             User            @relation(fields: [customerId], references: [id])
+  providerId           String          @db.Uuid
+  provider             ProviderProfile @relation(fields: [providerId], references: [id])
+  providerServiceId    String          @db.Uuid
+  providerService      ProviderService @relation(fields: [providerServiceId], references: [id])
+  bookingDate          DateTime        @db.Date
+  startTime            DateTime        @db.Time(0)
+  endTime              DateTime        @db.Time(0)
+  bookingStatus        BookingStatus
+  bookedPrice          Decimal         @db.Decimal(10, 2)
+  bookedDuration       Int             @db.SmallInt
+  bookedServiceMode    ServiceMode
+  serviceName          String          @db.VarChar(150)
+  providerBusinessName String          @db.VarChar(150)
+  customerNotes        String?
+  cancellationReason   String?
+  cancelledAt          DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  payments             Payment[]
+  review               Review?
+  notifications        Notification[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([providerServiceId])
+  @@index([bookingDate])
+  @@index([bookingStatus])
+  @@map("bookings")
+}
+
+model Payment {
+  id               String         @id @default(uuid()) @db.Uuid
+  bookingId        String         @db.Uuid
+  booking          Booking        @relation(fields: [bookingId], references: [id])
+  gateway          PaymentGateway @default(RAZORPAY)
+  gatewayOrderId   String         @unique @db.VarChar(255)
+  gatewayPaymentId String?        @unique @db.VarChar(255)
+  gatewaySignature String?
+  amount           Decimal        @db.Decimal(10, 2)
+  currency         String         @default("INR") @db.Char(3)
+  status           PaymentStatus  @default(CREATED)
+  paidAt           DateTime?
+  refundedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Review {
+  id         String          @id @default(uuid()) @db.Uuid
+  bookingId  String          @unique @db.Uuid
+  booking    Booking         @relation(fields: [bookingId], references: [id])
+  customerId String          @db.Uuid
+  customer   User            @relation(fields: [customerId], references: [id])
+  providerId String          @db.Uuid
+  provider   ProviderProfile @relation(fields: [providerId], references: [id])
+  rating     Int             @db.SmallInt
+  comment    String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([providerId])
+  @@map("reviews")
+}
+
+model Notification {
+  id            String              @id @default(uuid()) @db.Uuid
+  userId        String              @db.Uuid
+  user          User                @relation(fields: [userId], references: [id])
+  bookingId     String?             @db.Uuid
+  booking       Booking?            @relation(fields: [bookingId], references: [id])
+  type          NotificationType
+  channel       NotificationChannel @default(EMAIL)
+  status        NotificationStatus  @default(PENDING)
+  title         String              @db.VarChar(255)
+  body          String
+  scheduledFor  DateTime
+  sentAt        DateTime?
+  failedAt      DateTime?
+  failureReason String?
+  attemptCount  Int                 @default(0)
+  createdAt     DateTime            @default(now())
+
+  @@index([userId])
+  @@index([bookingId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  actorUserId String?     @db.Uuid
+  actorUser   User?       @relation(fields: [actorUserId], references: [id])
+  entityType  String      @db.VarChar(100)
+  entityId    String      @db.Uuid
+  action      AuditAction
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?     @db.VarChar(45)
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@map("audit_logs")
 }
