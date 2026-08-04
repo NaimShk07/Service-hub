@@ -19,6 +19,7 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
       "@common/*": ["src/common/*"],
@@ -30,4 +31,3 @@
   },
   "exclude": ["node_modules", "dist"]
 }
-
