@@ -1,7 +1,7 @@
-import { PrismaService } from '@database/prisma/prisma.service';
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma-client/client';
-import { Role } from '@prisma-client/enums';
+import { PrismaService } from "@database/prisma/prisma.service";
+import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma-client/client";
+import { Role } from "@prisma-client/enums";
 
 @Injectable()
 export class AuthRepository {

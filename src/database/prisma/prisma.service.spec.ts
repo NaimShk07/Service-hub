@@ -1,8 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from './prisma.service';
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "./prisma.service";
 
-describe('PrismaService', () => {
+describe("PrismaService", () => {
   let service: PrismaService;
 
   beforeEach(async () => {
@@ -14,7 +14,7 @@ describe('PrismaService', () => {
           useValue: {
             get: jest
               .fn()
-              .mockReturnValue('postgresql://user:pass@localhost:5432/db'),
+              .mockReturnValue("postgresql://user:pass@localhost:5432/db"),
           },
         },
       ],
@@ -23,7 +23,7 @@ describe('PrismaService', () => {
     service = module.get<PrismaService>(PrismaService);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(service).toBeDefined();
   });
 });
