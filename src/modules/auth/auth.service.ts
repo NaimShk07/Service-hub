@@ -10,6 +10,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Role } from "@prisma-client/enums";
 import { ConfigService } from "@nestjs/config";
 import { LoginDto } from "./dto/login.dto";
+import { RefreshTokenDto } from "./dto/refresh-token.dto";
 
 @Injectable()
 export class AuthService {
@@ -100,6 +101,49 @@ export class AuthService {
       user: { id: user.id, name: user.firstName, email: user.email },
       accessToken,
       refreshToken,
+    };
+  }
+
+  async refresh(refreshToken: string) {
+    const options = {
+      secret: this.configService.get("jwt.refreshSecret"),
+      expiresIn: this.configService.get("jwt.refreshExpiresIn"),
+    };
+
+    if (!refreshToken) {
+      throw new UnauthorizedException("Refresh token missing");
+    }
+
+    let user;
+
+    try {
+      user = await this.jwtService.verifyAsync(refreshToken, options);
+    } catch (error) {
+      throw new UnauthorizedException("Invalid or expired refresh token");
+    }
+
+    if (!user) {
+      throw new UnauthorizedException("Invalid credential");
+    }
+
+    const dbUser = await this.authRepository.findById(user.sub);
+
+    if (!dbUser || !dbUser?.refreshTokenHash) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    const isMatch = await bcrypt.compare(refreshToken, dbUser.refreshTokenHash);
+
+    if (!isMatch) {
+      throw new UnauthorizedException("Invalid refrsh token");
+    }
+
+    const tokens = await this.generateTokens(dbUser);
+
+    return {
+      user: { id: dbUser.id, name: dbUser.firstName, email: dbUser.email },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
     };
   }
 }
