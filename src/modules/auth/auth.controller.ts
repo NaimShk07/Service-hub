@@ -16,8 +16,15 @@ import { Response, Request } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 
 @Controller("auth")
+@ApiTags("Auth")
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -26,6 +33,9 @@ export class AuthController {
 
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: "Register a new user" })
+  @ApiResponse({ status: 201, description: "User successfully registered" })
+  @ApiResponse({ status: 400, description: "Email or phone already exists" })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
@@ -43,6 +53,9 @@ export class AuthController {
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Log in user" })
+  @ApiResponse({ status: 200, description: "User successfully logged in" })
+  @ApiResponse({ status: 401, description: "Invalid email or password" })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -60,6 +73,12 @@ export class AuthController {
 
   @Post("/refresh")
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Refresh access token using refresh cookie" })
+  @ApiResponse({
+    status: 200,
+    description: "Access token successfully refreshed",
+  })
+  @ApiResponse({ status: 401, description: "Refresh token missing or expired" })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -79,6 +98,9 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post("logout")
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Log out user and clear refresh cookie" })
+  @ApiResponse({ status: 200, description: "User successfully logged out" })
   async logout(
     @CurrentUser("userId") userId: string,
     @Res({ passthrough: true }) res: Response,
@@ -90,6 +112,10 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get("me")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get current authenticated user profile" })
+  @ApiResponse({ status: 200, description: "Profile retrieved successfully" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async profile(@CurrentUser() user: any) {
     const data = await this.authService.getProfile(user.userId);
     return data;

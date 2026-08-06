@@ -6,6 +6,7 @@ import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import cookieParser from "cookie-parser";
+import { LoggingInterceptor } from "@common/interceptors/logging.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -35,6 +36,7 @@ async function bootstrap() {
   // Global Exception Filter & Response Interceptor
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Swagger OpenAPI Documentation Setup
   const config = new DocumentBuilder()
