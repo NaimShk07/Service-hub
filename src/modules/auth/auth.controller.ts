@@ -55,6 +55,7 @@ export class AuthController {
   }
 
   @Post("/refresh")
+  @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -69,5 +70,13 @@ export class AuthController {
       path: "/api/v1/auth",
     });
     return { user: data.user, accessToken: data.accessToken };
+  }
+
+  @Post("logout")
+  @HttpCode(HttpStatus.OK)
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const data = await this.authService.logout(req.body.userId);
+    res.clearCookie("refreshToken", { path: "/api/v1/auth" });
+    return data;
   }
 }

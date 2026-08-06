@@ -146,4 +146,12 @@ export class AuthService {
       refreshToken: tokens.refreshToken,
     };
   }
+
+  async logout(userId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("User id not found");
+    }
+    await this.authRepository.update(userId, { refreshTokenHash: null });
+    return { message: "User logout successfully" };
+  }
 }
