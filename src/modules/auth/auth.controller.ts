@@ -6,12 +6,14 @@ import {
   Post,
   Req,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { RegisterDto } from "./dto/register.dto";
 import { ConfigService } from "@nestjs/config";
 import { Response, Request } from "express";
 import { LoginDto } from "./dto/login.dto";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 
 @Controller("auth")
 export class AuthController {
@@ -72,6 +74,7 @@ export class AuthController {
     return { user: data.user, accessToken: data.accessToken };
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post("logout")
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -79,4 +82,6 @@ export class AuthController {
     res.clearCookie("refreshToken", { path: "/api/v1/auth" });
     return data;
   }
+
+  // TODO: forgot/reset password
 }

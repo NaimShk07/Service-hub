@@ -10,7 +10,6 @@ import { JwtService } from "@nestjs/jwt";
 import { Role } from "@prisma-client/enums";
 import { ConfigService } from "@nestjs/config";
 import { LoginDto } from "./dto/login.dto";
-import { RefreshTokenDto } from "./dto/refresh-token.dto";
 
 @Injectable()
 export class AuthService {
