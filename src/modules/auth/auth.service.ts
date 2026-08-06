@@ -153,4 +153,16 @@ export class AuthService {
     await this.authRepository.update(userId, { refreshTokenHash: null });
     return { message: "User logout successfully" };
   }
+
+  async getProfile(userId: string) {
+    const user = await this.authRepository.findById(userId);
+
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    const { passwordHash, refreshTokenHash, ...sanitizedUser } = user;
+
+    return sanitizedUser;
+  }
 }

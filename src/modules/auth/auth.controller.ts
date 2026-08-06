@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -14,6 +15,7 @@ import { ConfigService } from "@nestjs/config";
 import { Response, Request } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { CurrentUser } from "@common/decorators/current-user.decorator";
 
 @Controller("auth")
 export class AuthController {
@@ -77,9 +79,19 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post("logout")
   @HttpCode(HttpStatus.OK)
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const data = await this.authService.logout(req.body.userId);
+  async logout(
+    @CurrentUser("userId") userId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.authService.logout(userId);
     res.clearCookie("refreshToken", { path: "/api/v1/auth" });
+    return data;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("me")
+  async profile(@CurrentUser() user: any) {
+    const data = await this.authService.getProfile(user.userId);
     return data;
   }
 
