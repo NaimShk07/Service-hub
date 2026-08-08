@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -37,7 +38,7 @@ export class CategoryController {
   @Get(":id")
   @ApiOperation({ summary: "Get category by ID" })
   @ApiParam({ name: "id", description: "Category ID" })
-  async findOne(@Param("id") id: string) {
+  async findOne(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.categoryService.findOne(id);
   }
 
@@ -59,7 +60,7 @@ export class CategoryController {
   @ApiParam({ name: "id", description: "Category ID" })
   @ApiBody({ type: UpdateCategoryDto })
   async update(
-    @Param("id") id: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
   ) {
     return this.categoryService.update(id, updateCategoryDto);
@@ -71,7 +72,7 @@ export class CategoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "Delete a category" })
   @ApiParam({ name: "id", description: "Category ID" })
-  async remove(@Param("id") id: string) {
+  async remove(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.categoryService.remove(id);
   }
 }
