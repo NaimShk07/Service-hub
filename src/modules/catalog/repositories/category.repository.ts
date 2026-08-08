@@ -1,16 +1,35 @@
+import { PrismaService } from "@database/prisma/prisma.service";
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma-client/client";
 
 @Injectable()
 export class CategoryRepository {
-  findAll() {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  findById() {}
+  async findAll() {
+    return await this.prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: { displayOrder: "asc" },
+    });
+  }
 
-  findBySlug() {}
+  async findById(id: string) {
+    return await this.prisma.category.findUnique({ where: { id } });
+  }
 
-  create() {}
+  async findBySlug(slug: string) {
+    return await this.prisma.category.findUnique({ where: { slug } });
+  }
 
-  update() {}
+  async create(data: Prisma.CategoryCreateInput) {
+    return await this.prisma.category.create({ data });
+  }
 
-  delete() {}
+  async update(id: string, data: Prisma.CategoryUpdateInput) {
+    return await this.prisma.category.update({ where: { id }, data });
+  }
+
+  async delete(id: string) {
+    return await this.prisma.category.delete({ where: { id } });
+  }
 }
