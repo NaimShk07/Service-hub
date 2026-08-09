@@ -1,12 +1,16 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -31,8 +35,13 @@ export class CategoryController {
 
   @Get()
   @ApiOperation({ summary: "Get all categories" })
-  async findAll() {
-    return this.categoryService.findAll();
+  async findAll(
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("includeInactive", new DefaultValuePipe(false), ParseBoolPipe)
+    includeInactive: boolean,
+  ) {
+    return this.categoryService.findAll(page, limit, includeInactive);
   }
 
   @Get(":id")

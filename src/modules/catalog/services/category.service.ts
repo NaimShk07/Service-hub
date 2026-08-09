@@ -11,8 +11,12 @@ import { UpdateCategoryDto } from "../dto/category/update-category.dto";
 export class CategoryService {
   constructor(private readonly categoryRepository: CategoryRepository) {}
 
-  async findAll() {
-    return await this.categoryRepository.findAllPaginated();
+  async findAll(page: number, limit: number, includeInactive: boolean = false) {
+    return await this.categoryRepository.findAllPaginated(
+      page,
+      limit,
+      includeInactive,
+    );
   }
 
   async findOne(id: string) {
@@ -35,43 +39,38 @@ export class CategoryService {
   }
 
   async update(id: string, updateCategoryDto: UpdateCategoryDto) {
-    const isCategoryExist = await this.findOne(id);
+    await this.findOne(id);
 
-    if (!isCategoryExist) {
-      throw new NotFoundException("Category don't exists");
-    }
+    let slug: string | undefined;
 
     if (updateCategoryDto.name) {
-      const slug = this.generateSlug(updateCategoryDto.name);
-
+      slug = this.generateSlug(updateCategoryDto.name);
       const isSlugExist = await this.categoryRepository.findBySlug(slug);
 
       if (isSlugExist && isSlugExist.id !== id) {
         throw new ConflictException("Category name already exists");
       }
-      return await this.categoryRepository.update(id, {
-        ...updateCategoryDto,
-        slug,
-      });
     }
 
     return await this.categoryRepository.update(id, {
       ...updateCategoryDto,
+      ...(slug && { slug }),
     });
   }
 
   async remove(id: string) {
-    const isCategoryExist = await this.findOne(id);
-
-    if (!isCategoryExist) {
-      throw new NotFoundException("Category don't exists");
-    }
+    await this.findOne(id);
     // TODO: Check if category has dependent services associated before hard deleting.
 
     return await this.categoryRepository.delete(id);
   }
 
   private generateSlug(name: string): string {
-    return name.toLowerCase().replace(/\s+/g, "-");
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "") // Remove non-alphanumeric characters except space & hyphen
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/-+/g, "-"); // Collapse multiple hyphens
   }
 }

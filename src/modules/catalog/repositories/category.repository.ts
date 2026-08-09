@@ -16,17 +16,26 @@ export class CategoryRepository extends BaseRepository {
     });
   }
 
-  async findAllPaginated(page: number = 1, limit: number = 10) {
+  async findAllPaginated(
+    page: number = 1,
+    limit: number = 10,
+    includeInactive: boolean = false,
+  ) {
     const skip = (page - 1) * limit;
+
+    const where: Prisma.CategoryWhereInput = includeInactive
+      ? {}
+      : { isActive: true };
+
     const query = this.prisma.category.findMany({
-      where: { isActive: true },
+      where,
       orderBy: { displayOrder: "asc" },
       skip,
       take: limit,
     });
 
     const total = this.prisma.category.count({
-      where: { isActive: true },
+      where,
     });
 
     return this.paginate(query, total, page, limit);
