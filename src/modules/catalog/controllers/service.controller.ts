@@ -24,9 +24,9 @@ export class ServiceController {
   @Post()
   create(@Body() dto: CreateServiceDto) {}
 
-  @Patch("id")
+  @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateServiceDto) {}
 
-  @Delete("id")
+  @Delete(":id")
   delete(@Param("id") id: string) {}
 }

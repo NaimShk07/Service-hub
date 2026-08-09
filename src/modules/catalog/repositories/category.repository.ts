@@ -2,6 +2,7 @@ import { PrismaService } from "@database/prisma/prisma.service";
 import { BaseRepository } from "@database/repositories/base.repository";
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma-client/client";
+import { QueryCategoryDto } from "../dto/category/query-category.dto";
 
 @Injectable()
 export class CategoryRepository extends BaseRepository {
@@ -9,27 +10,24 @@ export class CategoryRepository extends BaseRepository {
     super();
   }
 
-  async findAll() {
-    return await this.prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-    });
-  }
-
-  async findAllPaginated(
-    page: number = 1,
-    limit: number = 10,
-    includeInactive: boolean = false,
-  ) {
+  async findAllPaginated(queryDto: QueryCategoryDto) {
+    const { page = 1, limit = 10, includeInactive = false, search } = queryDto;
     const skip = (page - 1) * limit;
 
     const where: Prisma.CategoryWhereInput = includeInactive
       ? {}
       : { isActive: true };
 
+    if (search) {
+      where.name = {
+        contains: search,
+        mode: "insensitive",
+      };
+    }
+
     const query = this.prisma.category.findMany({
       where,
-      orderBy: { displayOrder: "asc" },
+      orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
       skip,
       take: limit,
     });

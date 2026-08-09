@@ -1,12 +1,9 @@
 import {
   Body,
   Controller,
-  DefaultValuePipe,
   Delete,
   Get,
   Param,
-  ParseBoolPipe,
-  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -27,6 +24,7 @@ import { Roles } from "@common/decorators/roles.decorator";
 import { Role } from "@prisma-client/enums";
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
 import { RoleGuard } from "@modules/auth/guards/roles.guard";
+import { QueryCategoryDto } from "../dto/category/query-category.dto";
 
 @ApiTags("Categories")
 @Controller("categories")
@@ -35,13 +33,8 @@ export class CategoryController {
 
   @Get()
   @ApiOperation({ summary: "Get all categories" })
-  async findAll(
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query("includeInactive", new DefaultValuePipe(false), ParseBoolPipe)
-    includeInactive: boolean,
-  ) {
-    return this.categoryService.findAll(page, limit, includeInactive);
+  async findAll(@Query() queryDto: QueryCategoryDto) {
+    return this.categoryService.findAll(queryDto);
   }
 
   @Get(":id")
