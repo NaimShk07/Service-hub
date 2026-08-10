@@ -26,7 +26,7 @@ export class CreateCategoryDto {
   })
   @IsString()
   @IsOptional()
-  description: string;
+  description?: string;
 
   @ApiPropertyOptional({
     example: "electronics",
@@ -34,7 +34,7 @@ export class CreateCategoryDto {
   })
   @IsString()
   @IsOptional()
-  icon: string;
+  icon?: string;
 
   @ApiProperty({
     example: 0,

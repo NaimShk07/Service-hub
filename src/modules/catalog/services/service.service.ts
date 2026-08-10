@@ -55,28 +55,30 @@ export class ServiceService {
   }
 
   async update(id: string, dto: UpdateServiceDto) {
-    await this.findOne(id);
+    const currentService = await this.findOne(id);
 
-    if (!dto.categoryId) {
-      throw new NotFoundException("Category id not found");
-    }
+    const targetCategoryId = dto.categoryId || currentService.categoryId;
 
-    const category = await this.categoryRepository.findById(dto.categoryId);
+    if (dto.categoryId) {
+      const category = await this.categoryRepository.findById(dto.categoryId);
 
-    if (!category) {
-      throw new NotFoundException("Category not found");
+      if (!category) {
+        throw new NotFoundException("Category id not found");
+      }
     }
 
     let slug: string | undefined;
 
     if (dto.name) {
       const isSlugExist = await this.serviceRepository.findByNameAndCategory(
-        dto.categoryId,
+        targetCategoryId,
         dto.name,
       );
 
       if (isSlugExist && id !== isSlugExist.id) {
-        throw new ConflictException("Service name already exist");
+        throw new ConflictException(
+          "Service name already exist in this category",
+        );
       }
       slug = generateSlug(dto.name);
     }
@@ -89,7 +91,6 @@ export class ServiceService {
 
   async remove(id: string) {
     await this.findOne(id);
-
     const hasProvider = await this.serviceRepository.hasProvider(id);
 
     if (hasProvider) {

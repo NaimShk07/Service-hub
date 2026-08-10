@@ -58,8 +58,13 @@ export class CategoryService {
 
   async remove(id: string) {
     await this.findOne(id);
-    // TODO: Check if category has dependent services associated before hard deleting.
+    const hasServices = await this.categoryRepository.hasService(id);
 
+    if (hasServices) {
+      throw new ConflictException(
+        "Cannot delete category with services attached to it",
+      );
+    }
     return await this.categoryRepository.delete(id);
   }
 }

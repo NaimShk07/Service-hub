@@ -61,4 +61,15 @@ export class CategoryRepository extends BaseRepository {
       data: { isActive: false },
     });
   }
+
+  async hasService(categoryId: string) {
+    const count = await this.prisma.service.count({
+      where: {
+        categoryId,
+        isActive: true,
+      },
+    });
+
+    return count > 0;
+  }
 }

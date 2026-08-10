@@ -10,15 +10,15 @@ import {
 } from "class-validator";
 
 export class QueryServiceDto {
-  @ApiPropertyOptional({ description: "Filter by category id" })
+  @ApiPropertyOptional({ description: "Filter services by category ID" })
   @IsUUID()
   @IsOptional()
-  categoryId: string;
+  categoryId?: string;
 
   @ApiPropertyOptional({ description: "Search services by name" })
   @IsString()
   @IsOptional()
-  search: string;
+  search?: string;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
