@@ -21,6 +21,7 @@
     "strictBindCallApply": false,
     "strictPropertyInitialization": false,
     "noFallthroughCasesInSwitch": false,
+    "types": ["node", "multer"],
     "paths": {
       "@common/*": ["src/common/*"],
       "@modules/*": ["src/modules/*"],

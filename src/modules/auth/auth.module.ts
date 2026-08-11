@@ -1,6 +1,4 @@
 import { Module } from "@nestjs/common";
-import { AuthController } from "./auth.controller";
-import { AuthService } from "./auth.service";
 import { JwtModule } from "@nestjs/jwt";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { StringValue } from "ms";
@@ -9,6 +7,8 @@ import { PassportModule } from "@nestjs/passport";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RoleGuard } from "./guards/roles.guard";
+import { AuthController } from "./controllers/auth.controller";
+import { AuthService } from "./services/auth.service";
 
 @Module({
   imports: [

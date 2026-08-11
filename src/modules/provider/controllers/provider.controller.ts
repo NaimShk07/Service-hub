@@ -1,15 +1,22 @@
 import {
   Body,
   Controller,
+  FileTypeValidator,
   Get,
+  MaxFileSizeValidator,
   Param,
+  ParseFilePipe,
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -21,6 +28,11 @@ import { UpdateProviderDto } from "../dto/update-provider.dto";
 
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { UploadDocumentDto } from "../dto/upload-document.dto";
+import { RoleGuard } from "@modules/auth/guards/roles.guard";
+import { Roles } from "@common/decorators/roles.decorator";
+import { DocumentType, Role } from "@prisma-client/enums";
 
 @ApiTags("Providers")
 @Controller("")
@@ -78,5 +90,61 @@ export class ProviderController {
   @ApiResponse({ status: 404, description: "Provider profile not found" })
   async getProviderById(@Param("id", new ParseUUIDPipe()) id: string) {
     return await this.providerService.getProfileById(id);
+  }
+
+  @Post("me/provider/documents")
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor("file"))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Upload provider document" })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    description: "Provider document upload",
+    schema: {
+      type: "object",
+      properties: {
+        documentType: {
+          type: "string",
+          enum: Object.values(DocumentType),
+          example: "LICENSE",
+        },
+        file: { type: "string", format: "binary" },
+      },
+      required: ["documentType", "file"],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Provider document uploaded successfully",
+  })
+  async uploadDocument(
+    @CurrentUser("userId") userId: string,
+    @Body() dto: UploadDocumentDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|pdf)$/ }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return await this.providerService.uploadDocument(userId, dto, file);
+  }
+  @Get("admin/provider/:id/document")
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get provider documents for admin" })
+  @ApiResponse({
+    status: 200,
+    description: "Provider documents retrieved successfully",
+  })
+  @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
+  async getDocumentForAdmin(
+    @Param("id", new ParseUUIDPipe()) providerId: string,
+  ) {
+    return await this.providerService.getProviderDocumentsForAdmin(providerId);
   }
 }

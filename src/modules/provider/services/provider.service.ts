@@ -6,10 +6,17 @@ import {
 import { ProviderRepository } from "../repositories/provider.repository";
 import { CreateProviderDto } from "../dto/create-provider.dto";
 import { UpdateProviderDto } from "../dto/update-provider.dto";
+import { DocumentRepository } from "../repositories/document.repository";
+import { UploadDocumentDto } from "../dto/upload-document.dto";
+import { StorageService } from "@common/storage/storage.service";
 
 @Injectable()
 export class ProviderService {
-  constructor(private readonly providerRepository: ProviderRepository) {}
+  constructor(
+    private readonly providerRepository: ProviderRepository,
+    private readonly documentRepository: DocumentRepository,
+    private readonly storageService: StorageService,
+  ) {}
 
   async createProfile(userId: string, dto: CreateProviderDto) {
     const isUserExist = await this.providerRepository.findByUserId(userId);
@@ -60,12 +67,51 @@ export class ProviderService {
   }
 
   async getProfileById(id: string) {
-    const profile = await this.providerRepository.findById(id);
+    const provider = await this.providerRepository.findById(id);
 
-    if (!profile) {
+    if (!provider) {
       throw new NotFoundException("Provider not found");
     }
 
-    return profile;
+    return provider;
+  }
+
+  async uploadDocument(
+    userId: string,
+    dto: UploadDocumentDto,
+    file: Express.Multer.File,
+  ) {
+    const provider = await this.providerRepository.findByUserId(userId);
+    if (!provider) {
+      throw new NotFoundException("Provider profile not found");
+    }
+
+    const document = await this.documentRepository.findDocumentByType(
+      provider.id,
+      dto.documentType,
+    );
+
+    if (document) {
+      throw new ConflictException(
+        `Document of type ${dto.documentType} already uploaded`,
+      );
+    }
+
+    const fileUrl = await this.storageService.uploadFile(file, "documents");
+    return await this.documentRepository.createDocument(
+      provider.id,
+      dto.documentType,
+      fileUrl,
+    );
+  }
+
+  async getProviderDocumentsForAdmin(providerId: string) {
+    const provider = await this.providerRepository.findById(providerId);
+
+    if (!provider) {
+      throw new NotFoundException("Provider not found");
+    }
+
+    return await this.documentRepository.findDocumentsByProviderId(providerId);
   }
 }

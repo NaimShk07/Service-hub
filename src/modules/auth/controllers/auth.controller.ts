@@ -9,12 +9,12 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { AuthService } from "./auth.service";
-import { RegisterDto } from "./dto/register.dto";
+import { AuthService } from "../services/auth.service";
+import { RegisterDto } from "../dto/register.dto";
 import { ConfigService } from "@nestjs/config";
 import { Response, Request } from "express";
-import { LoginDto } from "./dto/login.dto";
-import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { LoginDto } from "../dto/login.dto";
+import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import {
   ApiBearerAuth,
