@@ -11,6 +11,7 @@ import { ProviderModule } from "@modules/provider/provider.module";
 import { StorageModule } from "@common/storage/storage.module";
 import { ServeStaticModule } from "@nestjs/serve-static";
 import { join } from "path";
+import { AdminModule } from "@modules/admin/admin.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { join } from "path";
     ProviderModule,
     HealthModule,
     StorageModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
