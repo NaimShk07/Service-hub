@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { ServiceRepository } from "../repositories/service.repository";
@@ -12,16 +13,20 @@ import { generateSlug } from "@common/utils/slug.util";
 
 @Injectable()
 export class ServiceService {
+  private readonly logger = new Logger(ServiceService.name);
+
   constructor(
     private readonly serviceRepository: ServiceRepository,
     private readonly categoryRepository: CategoryRepository,
   ) {}
 
   async create(dto: CreateServiceDto) {
+    this.logger.log(`Creating service "${dto.name}" in category "${dto.categoryId}"`);
     const category = await this.categoryRepository.findById(dto.categoryId);
 
     if (!category) {
-      throw new NotFoundException("Category not found");
+      this.logger.warn(`Category with ID "${dto.categoryId}" not found`);
+      throw new NotFoundException(`Category with ID "${dto.categoryId}" not found`);
     }
 
     const isUnique = await this.serviceRepository.findByNameAndCategory(
@@ -30,14 +35,18 @@ export class ServiceService {
     );
 
     if (isUnique) {
+      this.logger.warn(
+        `Service name "${dto.name}" already exists in category "${dto.categoryId}"`,
+      );
       throw new ConflictException(
-        "Service name already exist in this category",
+        "Service name already exists in this category",
       );
     }
 
     const slug = generateSlug(dto.name);
-
-    return await this.serviceRepository.create({ ...dto, slug });
+    const service = await this.serviceRepository.create({ ...dto, slug });
+    this.logger.log(`Successfully created service "${service.name}" (${service.id})`);
+    return service;
   }
 
   async findAll(queryDto: QueryServiceDto) {
@@ -48,13 +57,15 @@ export class ServiceService {
     const service = await this.serviceRepository.findById(id);
 
     if (!service) {
-      throw new NotFoundException(`Service with ID ${id} not found`);
+      this.logger.warn(`Service with ID "${id}" not found`);
+      throw new NotFoundException(`Service with ID "${id}" not found`);
     }
 
     return service;
   }
 
   async update(id: string, dto: UpdateServiceDto) {
+    this.logger.log(`Updating service "${id}"`);
     const currentService = await this.findOne(id);
 
     const targetCategoryId = dto.categoryId || currentService.categoryId;
@@ -63,7 +74,8 @@ export class ServiceService {
       const category = await this.categoryRepository.findById(dto.categoryId);
 
       if (!category) {
-        throw new NotFoundException("Category id not found");
+        this.logger.warn(`Target category ID "${dto.categoryId}" not found`);
+        throw new NotFoundException(`Category with ID "${dto.categoryId}" not found`);
       }
     }
 
@@ -76,29 +88,38 @@ export class ServiceService {
       );
 
       if (isSlugExist && id !== isSlugExist.id) {
+        this.logger.warn(
+          `Service name "${dto.name}" already exists in category "${targetCategoryId}"`,
+        );
         throw new ConflictException(
-          "Service name already exist in this category",
+          "Service name already exists in this category",
         );
       }
       slug = generateSlug(dto.name);
     }
 
-    return await this.serviceRepository.update(id, {
+    const updated = await this.serviceRepository.update(id, {
       ...dto,
       ...(slug && { slug }),
     });
+    this.logger.log(`Successfully updated service "${id}"`);
+    return updated;
   }
 
   async remove(id: string) {
+    this.logger.log(`Deleting service "${id}"`);
     await this.findOne(id);
     const hasProvider = await this.serviceRepository.hasProvider(id);
 
     if (hasProvider) {
+      this.logger.warn(`Cannot delete service "${id}" because active provider offerings exist`);
       throw new ConflictException(
         "Cannot delete service because providers are currently offering it",
       );
     }
 
-    return this.serviceRepository.delete(id);
+    const result = await this.serviceRepository.delete(id);
+    this.logger.log(`Successfully deleted service "${id}"`);
+    return result;
   }
 }

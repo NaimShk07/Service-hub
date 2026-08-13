@@ -14,6 +14,7 @@ export class CreateCategoryDto {
   @ApiProperty({
     example: "Electronics",
     description: "Category name",
+    minLength: 1,
   })
   @Transform(({ value }) => value?.trim())
   @IsString()

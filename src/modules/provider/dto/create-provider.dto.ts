@@ -16,6 +16,7 @@ export class CreateProviderDto {
   @ApiProperty({
     description: "Unique business name",
     example: "Sharma Home Services",
+    minLength: 1,
   })
   @IsString()
   @IsNotEmpty()

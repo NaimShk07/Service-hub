@@ -12,6 +12,8 @@ export class RegisterDto {
   @ApiProperty({
     example: "StrongPassword123!",
     description: "Password (8-100 characters)",
+    minLength: 8,
+    maxLength: 100,
   })
   @IsString()
   @Length(8, 100)
@@ -20,6 +22,8 @@ export class RegisterDto {
   @ApiProperty({
     example: "John",
     description: "User's first name",
+    minLength: 2,
+    maxLength: 100,
   })
   @IsString()
   @Length(2, 100)
@@ -28,6 +32,8 @@ export class RegisterDto {
   @ApiProperty({
     example: "Doe",
     description: "User's last name",
+    minLength: 2,
+    maxLength: 100,
   })
   @IsString()
   @Length(2, 100)

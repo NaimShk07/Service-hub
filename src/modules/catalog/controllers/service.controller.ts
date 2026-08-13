@@ -15,6 +15,7 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
 import { ServiceService } from "../services/service.service";
@@ -33,13 +34,17 @@ export class ServiceController {
 
   @Get()
   @ApiOperation({ summary: "Get all services" })
+  @ApiResponse({ status: 200, description: "Paginated list of services" })
   async findAll(@Query() queryDto: QueryServiceDto) {
     return await this.serviceService.findAll(queryDto);
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Get service by ID" })
-  @ApiParam({ name: "id", description: "Service ID" })
+  @ApiParam({ name: "id", description: "Service ID", format: "uuid" })
+  @ApiResponse({ status: 200, description: "Service details" })
+  @ApiResponse({ status: 400, description: "Invalid UUID format" })
+  @ApiResponse({ status: 404, description: "Service not found" })
   async findOne(@Param("id", new ParseUUIDPipe()) id: string) {
     return await this.serviceService.findOne(id);
   }
@@ -50,6 +55,18 @@ export class ServiceController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "Create a service" })
   @ApiBody({ type: CreateServiceDto })
+  @ApiResponse({ status: 201, description: "Service created successfully" })
+  @ApiResponse({
+    status: 400,
+    description: "Validation error or invalid category ID",
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
+  @ApiResponse({ status: 404, description: "Category not found" })
+  @ApiResponse({
+    status: 409,
+    description: "Service name already exists in category",
+  })
   async create(@Body() createServiceDto: CreateServiceDto) {
     return await this.serviceService.create(createServiceDto);
   }
@@ -59,8 +76,14 @@ export class ServiceController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Update a service" })
-  @ApiParam({ name: "id", description: "Service ID" })
+  @ApiParam({ name: "id", description: "Service ID", format: "uuid" })
   @ApiBody({ type: UpdateServiceDto })
+  @ApiResponse({ status: 200, description: "Service updated successfully" })
+  @ApiResponse({ status: 400, description: "Validation error or invalid UUID" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
+  @ApiResponse({ status: 404, description: "Service or Category not found" })
+  @ApiResponse({ status: 409, description: "Service name conflict" })
   async update(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() updateServiceDto: UpdateServiceDto,
@@ -73,7 +96,12 @@ export class ServiceController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Delete a service" })
-  @ApiParam({ name: "id", description: "Service ID" })
+  @ApiParam({ name: "id", description: "Service ID", format: "uuid" })
+  @ApiResponse({ status: 200, description: "Service deleted successfully" })
+  @ApiResponse({ status: 400, description: "Invalid UUID format" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
+  @ApiResponse({ status: 404, description: "Service not found" })
   async remove(@Param("id", new ParseUUIDPipe()) id: string) {
     return await this.serviceService.remove(id);
   }

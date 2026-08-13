@@ -9,5 +9,6 @@ import { StorageModule } from "@common/storage/storage.module";
   imports: [StorageModule],
   controllers: [ProviderController],
   providers: [ProviderService, ProviderRepository, DocumentRepository],
+  exports: [ProviderRepository, ProviderService],
 })
 export class ProviderModule {}

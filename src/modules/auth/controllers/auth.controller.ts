@@ -35,7 +35,10 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: "Register a new user" })
   @ApiResponse({ status: 201, description: "User successfully registered" })
-  @ApiResponse({ status: 400, description: "Email or phone already exists" })
+  @ApiResponse({
+    status: 400,
+    description: "Validation error or email/phone already exists",
+  })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
@@ -55,6 +58,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Log in user" })
   @ApiResponse({ status: 200, description: "User successfully logged in" })
+  @ApiResponse({ status: 400, description: "Validation error" })
   @ApiResponse({ status: 401, description: "Invalid email or password" })
   async login(
     @Body() dto: LoginDto,
@@ -101,6 +105,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "Log out user and clear refresh cookie" })
   @ApiResponse({ status: 200, description: "User successfully logged out" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async logout(
     @CurrentUser("userId") userId: string,
     @Res({ passthrough: true }) res: Response,

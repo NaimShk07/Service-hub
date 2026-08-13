@@ -15,6 +15,7 @@ export class CreateServiceDto {
   @ApiProperty({
     example: "123e4567-e89b-12d3-a456-426614174000",
     description: "ID of the category",
+    format: "uuid",
   })
   @IsUUID()
   @IsNotEmpty()
@@ -23,6 +24,7 @@ export class CreateServiceDto {
   @ApiProperty({
     example: "AC Repair & Servicing",
     description: "Service name",
+    minLength: 1,
   })
   @Transform(({ value }) => value?.trim())
   @IsString()

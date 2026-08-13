@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { CategoryRepository } from "../repositories/category.repository";
@@ -11,6 +12,8 @@ import { generateSlug } from "@common/utils/slug.util";
 
 @Injectable()
 export class CategoryService {
+  private readonly logger = new Logger(CategoryService.name);
+
   constructor(private readonly categoryRepository: CategoryRepository) {}
 
   async findAll(queryDto: QueryCategoryDto) {
@@ -20,23 +23,29 @@ export class CategoryService {
   async findOne(id: string) {
     const category = await this.categoryRepository.findById(id);
     if (!category) {
+      this.logger.warn(`Category with ID "${id}" not found`);
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
     return category;
   }
 
   async create(dto: CreateCategoryDto) {
+    this.logger.log(`Creating category "${dto.name}"`);
     const slug = generateSlug(dto.name);
     const isSlugExist = await this.categoryRepository.findBySlug(slug);
 
     if (isSlugExist) {
-      throw new ConflictException("Category name already exists");
+      this.logger.warn(`Category name "${dto.name}" already exists`);
+      throw new ConflictException(`Category name "${dto.name}" already exists`);
     }
 
-    return await this.categoryRepository.create({ ...dto, slug });
+    const category = await this.categoryRepository.create({ ...dto, slug });
+    this.logger.log(`Successfully created category "${category.name}" (${category.id})`);
+    return category;
   }
 
   async update(id: string, dto: UpdateCategoryDto) {
+    this.logger.log(`Updating category "${id}"`);
     await this.findOne(id);
 
     let slug: string | undefined;
@@ -46,25 +55,32 @@ export class CategoryService {
       const isSlugExist = await this.categoryRepository.findBySlug(slug);
 
       if (isSlugExist && isSlugExist.id !== id) {
-        throw new ConflictException("Category name already exists");
+        this.logger.warn(`Category name "${dto.name}" already exists`);
+        throw new ConflictException(`Category name "${dto.name}" already exists`);
       }
     }
 
-    return await this.categoryRepository.update(id, {
+    const updated = await this.categoryRepository.update(id, {
       ...dto,
       ...(slug && { slug }),
     });
+    this.logger.log(`Successfully updated category "${id}"`);
+    return updated;
   }
 
   async remove(id: string) {
+    this.logger.log(`Deleting category "${id}"`);
     await this.findOne(id);
     const hasServices = await this.categoryRepository.hasService(id);
 
     if (hasServices) {
+      this.logger.warn(`Cannot delete category "${id}" because services are attached to it`);
       throw new ConflictException(
         "Cannot delete category with services attached to it",
       );
     }
-    return await this.categoryRepository.delete(id);
+    const result = await this.categoryRepository.delete(id);
+    this.logger.log(`Successfully deleted category "${id}"`);
+    return result;
   }
 }

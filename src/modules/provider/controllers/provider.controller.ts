@@ -42,10 +42,17 @@ export class ProviderController {
   @Post("me/provider")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Create provider profile" })
+  @ApiOperation({ summary: "Create provider profile for current user" })
   @ApiResponse({
     status: 201,
     description: "Provider profile created successfully",
+  })
+  @ApiResponse({ status: 400, description: "Validation error" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 409,
+    description:
+      "User is already registered as a provider or business name exists",
   })
   async createProfile(
     @CurrentUser("userId") userId: string,
@@ -62,6 +69,8 @@ export class ProviderController {
     status: 200,
     description: "Provider profile retrieved successfully",
   })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 404, description: "Provider profile not found" })
   async getOwnProfile(@CurrentUser("userId") userId: string) {
     return await this.providerService.getOwnProfile(userId);
   }
@@ -74,6 +83,10 @@ export class ProviderController {
     status: 200,
     description: "Provider profile updated successfully",
   })
+  @ApiResponse({ status: 400, description: "Validation error" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 404, description: "Provider profile not found" })
+  @ApiResponse({ status: 409, description: "Business name already exists" })
   async updateOwnProfile(
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateProviderDto,
@@ -87,6 +100,7 @@ export class ProviderController {
     status: 200,
     description: "Provider profile retrieved successfully",
   })
+  @ApiResponse({ status: 400, description: "Invalid UUID format" })
   @ApiResponse({ status: 404, description: "Provider profile not found" })
   async getProviderById(@Param("id", new ParseUUIDPipe()) id: string) {
     return await this.providerService.getProfileById(id);
@@ -117,6 +131,12 @@ export class ProviderController {
     status: 201,
     description: "Provider document uploaded successfully",
   })
+  @ApiResponse({
+    status: 400,
+    description: "Validation error or invalid file type/size",
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 404, description: "Provider profile not found" })
   async uploadDocument(
     @CurrentUser("userId") userId: string,
     @Body() dto: UploadDocumentDto,
@@ -141,7 +161,9 @@ export class ProviderController {
     status: 200,
     description: "Provider documents retrieved successfully",
   })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
+  @ApiResponse({ status: 404, description: "Provider or document not found" })
   async getDocumentForAdmin(
     @Param("id", new ParseUUIDPipe()) providerId: string,
   ) {
