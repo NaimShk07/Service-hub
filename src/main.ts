@@ -7,10 +7,14 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import cookieParser from "cookie-parser";
 import { LoggingInterceptor } from "@common/interceptors/logging.interceptor";
+import helmet from "helmet";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+
+  // Helmet
+  app.use(helmet());
 
   // Cookie
   app.use(cookieParser());
@@ -19,7 +23,15 @@ async function bootstrap() {
   app.setGlobalPrefix("api/v1");
 
   // Enable CORS
-  app.enableCors();
+  const cors = configService.get<{
+    origins: string[];
+    credentials: boolean;
+  }>("cors");
+
+  app.enableCors({
+    origin: cors?.origins.length ? cors.origins : false,
+    credentials: cors?.credentials ?? false,
+  });
 
   // Global Validation Pipe
   app.useGlobalPipes(

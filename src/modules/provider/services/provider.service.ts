@@ -36,11 +36,15 @@ export class ProviderService {
 
     if (isDuplicate) {
       this.logger.warn(`Business name "${dto.businessName}" already exists`);
-      throw new ConflictException(`Business name "${dto.businessName}" already exists`);
+      throw new ConflictException(
+        `Business name "${dto.businessName}" already exists`,
+      );
     }
 
     const profile = await this.providerRepository.create(userId, dto);
-    this.logger.log(`Successfully created provider profile: ${profile.id} for user: ${userId}`);
+    this.logger.log(
+      `Successfully created provider profile: ${profile.id} for user: ${userId}`,
+    );
     return profile;
   }
 
@@ -68,8 +72,12 @@ export class ProviderService {
       );
 
       if (isDuplicate && isDuplicate.id !== profile.id) {
-        this.logger.warn(`Business name "${dto.businessName}" is already taken`);
-        throw new ConflictException(`Business name "${dto.businessName}" already exists`);
+        this.logger.warn(
+          `Business name "${dto.businessName}" is already taken`,
+        );
+        throw new ConflictException(
+          `Business name "${dto.businessName}" already exists`,
+        );
       }
     }
 
@@ -93,7 +101,9 @@ export class ProviderService {
     dto: UploadDocumentDto,
     file: Express.Multer.File,
   ) {
-    this.logger.log(`Uploading document "${dto.documentType}" for user: ${userId}`);
+    this.logger.log(
+      `Uploading document "${dto.documentType}" for user: ${userId}`,
+    );
     const provider = await this.providerRepository.findByUserId(userId);
     if (!provider) {
       throw new NotFoundException("Provider profile not found for this user");

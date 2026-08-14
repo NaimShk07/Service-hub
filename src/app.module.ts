@@ -18,6 +18,8 @@ import { AdminModule } from "@modules/admin/admin.module";
     ConfigModule.forRoot({
       isGlobal: true,
       load: configs,
+      ignoreEnvFile: process.env.NODE_ENV === "production",
+      cache: true,
     }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), "uploads"),

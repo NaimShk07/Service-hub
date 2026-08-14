@@ -14,5 +14,6 @@ import { ServiceRepository } from "./repositories/service.repository";
     CategoryRepository,
     ServiceRepository,
   ],
+  exports: [CategoryRepository, ServiceRepository],
 })
 export class CatalogsModule {}
