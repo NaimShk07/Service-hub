@@ -40,7 +40,9 @@ export class CategoryService {
     }
 
     const category = await this.categoryRepository.create({ ...dto, slug });
-    this.logger.log(`Successfully created category "${category.name}" (${category.id})`);
+    this.logger.log(
+      `Successfully created category "${category.name}" (${category.id})`,
+    );
     return category;
   }
 
@@ -56,7 +58,9 @@ export class CategoryService {
 
       if (isSlugExist && isSlugExist.id !== id) {
         this.logger.warn(`Category name "${dto.name}" already exists`);
-        throw new ConflictException(`Category name "${dto.name}" already exists`);
+        throw new ConflictException(
+          `Category name "${dto.name}" already exists`,
+        );
       }
     }
 
@@ -74,7 +78,9 @@ export class CategoryService {
     const hasServices = await this.categoryRepository.hasService(id);
 
     if (hasServices) {
-      this.logger.warn(`Cannot delete category "${id}" because services are attached to it`);
+      this.logger.warn(
+        `Cannot delete category "${id}" because services are attached to it`,
+      );
       throw new ConflictException(
         "Cannot delete category with services attached to it",
       );

@@ -99,4 +99,30 @@ export class ProviderRepository {
       },
     });
   }
+
+  async findPublicById(providerId: string) {
+    return await this.prisma.providerProfile.findUnique({
+      where: { id: providerId },
+      include: {
+        user: {
+          select: { firstName: true, lastName: true },
+        },
+        locations: true,
+        services: {
+          where: { isActive: true },
+          include: {
+            service: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                serviceMode: true,
+                category: { select: { id: true, name: true, slug: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
 }

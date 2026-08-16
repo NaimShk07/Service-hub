@@ -2,10 +2,15 @@ import { PrismaService } from "@database/prisma/prisma.service";
 import { Injectable } from "@nestjs/common";
 import { CreateProviderServiceDto } from "../dto/create-provider-service.dto";
 import { UpdateProviderServiceDto } from "../dto/update-provider-service.dto";
+import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
+import { BaseRepository } from "@database/repositories/base.repository";
+import { Prisma } from "@prisma-client/client";
 
 @Injectable()
-export class ProviderServiceRepository {
-  constructor(private readonly prisma: PrismaService) {}
+export class ProviderServiceRepository extends BaseRepository {
+  constructor(private readonly prisma: PrismaService) {
+    super();
+  }
 
   async findByProviderId(providerId: string) {
     return await this.prisma.providerService.findMany({
@@ -50,5 +55,40 @@ export class ProviderServiceRepository {
         isActive: false,
       },
     });
+  }
+
+  async findPublicProviderService(
+    providerId: string,
+    queryDto: QueryPublicProviderServicesDto,
+  ) {
+    const { categoryId, serviceMode, search, page = 1, limit = 10 } = queryDto;
+    const skip = (page - 1) * limit;
+
+    const whereClause: Prisma.ProviderServiceWhereInput = {
+      providerId,
+      isActive: true,
+
+      service: {
+        isActive: true,
+        ...(categoryId && { categoryId }),
+        ...(serviceMode && { serviceMode }),
+        ...(search && { name: { contains: search, mode: "insensitive" } }),
+      },
+    };
+
+    const query = this.prisma.providerService.findMany({
+      where: whereClause,
+      skip,
+      take: limit,
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    const total = this.prisma.providerService.count({
+      where: whereClause,
+    });
+
+    return this.paginate(query, total, page, limit);
   }
 }

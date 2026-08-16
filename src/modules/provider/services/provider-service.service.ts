@@ -7,12 +7,15 @@ import { ProviderServiceRepository } from "../repositories/provider-service.repo
 import { ServiceRepository } from "@modules/catalog/repositories/service.repository";
 import { UpdateProviderServiceDto } from "../dto/update-provider-service.dto";
 import { CreateProviderServiceDto } from "../dto/create-provider-service.dto";
+import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
+import { ProviderRepository } from "../repositories/provider.repository";
 
 @Injectable()
 export class ProviderServiceService {
   constructor(
     private readonly providerServiceRepository: ProviderServiceRepository,
     private readonly serviceRepository: ServiceRepository,
+    private readonly providerRepository: ProviderRepository,
   ) {}
 
   async create(providerId: string, dto: CreateProviderServiceDto) {
@@ -57,5 +60,21 @@ export class ProviderServiceService {
     }
 
     return await this.providerServiceRepository.delete(id);
+  }
+
+  async getPublicProviderServices(
+    providerId: string,
+    queryDto: QueryPublicProviderServicesDto,
+  ) {
+    const providerProfile = await this.providerRepository.findById(providerId);
+
+    if (!providerProfile) {
+      throw new NotFoundException("Provider not found");
+    }
+
+    return await this.providerServiceRepository.findPublicProviderService(
+      providerId,
+      queryDto,
+    );
   }
 }

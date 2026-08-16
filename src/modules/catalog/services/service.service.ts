@@ -21,12 +21,16 @@ export class ServiceService {
   ) {}
 
   async create(dto: CreateServiceDto) {
-    this.logger.log(`Creating service "${dto.name}" in category "${dto.categoryId}"`);
+    this.logger.log(
+      `Creating service "${dto.name}" in category "${dto.categoryId}"`,
+    );
     const category = await this.categoryRepository.findById(dto.categoryId);
 
     if (!category) {
       this.logger.warn(`Category with ID "${dto.categoryId}" not found`);
-      throw new NotFoundException(`Category with ID "${dto.categoryId}" not found`);
+      throw new NotFoundException(
+        `Category with ID "${dto.categoryId}" not found`,
+      );
     }
 
     const isUnique = await this.serviceRepository.findByNameAndCategory(
@@ -45,7 +49,9 @@ export class ServiceService {
 
     const slug = generateSlug(dto.name);
     const service = await this.serviceRepository.create({ ...dto, slug });
-    this.logger.log(`Successfully created service "${service.name}" (${service.id})`);
+    this.logger.log(
+      `Successfully created service "${service.name}" (${service.id})`,
+    );
     return service;
   }
 
@@ -75,7 +81,9 @@ export class ServiceService {
 
       if (!category) {
         this.logger.warn(`Target category ID "${dto.categoryId}" not found`);
-        throw new NotFoundException(`Category with ID "${dto.categoryId}" not found`);
+        throw new NotFoundException(
+          `Category with ID "${dto.categoryId}" not found`,
+        );
       }
     }
 
@@ -112,7 +120,9 @@ export class ServiceService {
     const hasProvider = await this.serviceRepository.hasProvider(id);
 
     if (hasProvider) {
-      this.logger.warn(`Cannot delete service "${id}" because active provider offerings exist`);
+      this.logger.warn(
+        `Cannot delete service "${id}" because active provider offerings exist`,
+      );
       throw new ConflictException(
         "Cannot delete service because providers are currently offering it",
       );

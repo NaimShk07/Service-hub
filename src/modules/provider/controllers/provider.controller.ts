@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -18,6 +19,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
@@ -33,11 +35,16 @@ import { UploadDocumentDto } from "../dto/upload-document.dto";
 import { RoleGuard } from "@modules/auth/guards/roles.guard";
 import { Roles } from "@common/decorators/roles.decorator";
 import { DocumentType, Role } from "@prisma-client/enums";
+import { ProviderServiceService } from "../services/provider-service.service";
+import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
 
 @ApiTags("Providers")
 @Controller("")
 export class ProviderController {
-  constructor(private readonly providerService: ProviderService) {}
+  constructor(
+    private readonly providerService: ProviderService,
+    private readonly providerServiceService: ProviderServiceService,
+  ) {}
 
   @Post("me/provider")
   @UseGuards(JwtAuthGuard)
@@ -168,5 +175,50 @@ export class ProviderController {
     @Param("id", new ParseUUIDPipe()) providerId: string,
   ) {
     return await this.providerService.getProviderDocumentsForAdmin(providerId);
+  }
+
+  @Get("providers/:id")
+  @ApiOperation({ summary: "Get public provider profile by ID" })
+  @ApiParam({
+    name: "id",
+    description: "Provider profile UUID",
+    type: String,
+    format: "uuid",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Public provider profile retrieved successfully",
+  })
+  @ApiResponse({ status: 400, description: "Invalid UUID format" })
+  @ApiResponse({ status: 404, description: "Provider profile not found" })
+  async getPublicProviderById(@Param("id", new ParseUUIDPipe()) id: string) {
+    return await this.providerService.getPublicProfileById(id);
+  }
+
+  @Get("providers/:id/services")
+  @ApiOperation({ summary: "Get active services offered by provider" })
+  @ApiParam({
+    name: "id",
+    description: "Provider profile UUID",
+    type: String,
+    format: "uuid",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of active services offered by provider",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid UUID format or query parameters",
+  })
+  @ApiResponse({ status: 404, description: "Provider profile not found" })
+  async getPublicProviderServices(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Query() queryDto: QueryPublicProviderServicesDto,
+  ) {
+    return await this.providerServiceService.getPublicProviderServices(
+      id,
+      queryDto,
+    );
   }
 }

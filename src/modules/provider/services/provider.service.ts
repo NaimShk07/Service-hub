@@ -144,4 +144,10 @@ export class ProviderService {
 
     return await this.documentRepository.findDocumentsByProviderId(providerId);
   }
+
+  async getPublicProfileById(providerId: string) {
+    await this.getProfileById(providerId);
+
+    return await this.providerRepository.findPublicById(providerId);
+  }
 }

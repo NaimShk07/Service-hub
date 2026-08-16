@@ -143,7 +143,8 @@ describe("Provider Onboarding (e2e)", () => {
       .set("Authorization", `Bearer ${userToken}`)
       .send({
         businessName: "Another Provider Services",
-        description: "Attempting to create second provider profile for same user.",
+        description:
+          "Attempting to create second provider profile for same user.",
         experienceYears: 3,
         addressLine1: "456 Test Road",
         city: "Mumbai",
