@@ -8,16 +8,25 @@ import { ProviderServiceController } from "./controllers/provider-service.contro
 import { ProviderServiceRepository } from "./repositories/provider-service.repository";
 import { ProviderServiceService } from "./services/provider-service.service";
 import { CatalogsModule } from "@modules/catalog/catalogs.module";
+import { ProviderAvailabilityController } from "./controllers/provider-availability.controller";
+import { ProviderAvailabilityService } from "./services/provider-availability.service";
+import { ProviderAvailabilityRepository } from "./repositories/provider-availability.repositor";
 
 @Module({
   imports: [StorageModule, CatalogsModule],
-  controllers: [ProviderController, ProviderServiceController],
+  controllers: [
+    ProviderController,
+    ProviderServiceController,
+    ProviderAvailabilityController,
+  ],
   providers: [
+    DocumentRepository,
     ProviderService,
     ProviderRepository,
     ProviderServiceService,
     ProviderServiceRepository,
-    DocumentRepository,
+    ProviderAvailabilityService,
+    ProviderAvailabilityRepository,
   ],
   exports: [ProviderRepository, ProviderService],
 })

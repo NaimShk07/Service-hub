@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common";
 import { RegisterDto } from "../dto/register.dto";
@@ -13,6 +14,8 @@ import { LoginDto } from "../dto/login.dto";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
@@ -34,7 +37,6 @@ export class AuthService {
       expiresIn: this.configService.get("jwt.refreshExpiresIn"),
     };
 
-    // Auto take secret and expire
     const accessToken = await this.jwtService.signAsync(jwtPayload);
     const refreshToken = await this.jwtService.signAsync(jwtPayload, options);
 
@@ -45,15 +47,18 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    this.logger.log(`Registering user with email: ${dto.email}`);
     const emailExists = await this.authRepository.findByEmail(dto.email);
 
     if (emailExists) {
+      this.logger.warn(`Registration failed. Email "${dto.email}" already exists`);
       throw new BadRequestException("Email already exists");
     }
 
     const phoneExists = await this.authRepository.findByPhone(dto.phone);
 
     if (phoneExists) {
+      this.logger.warn(`Registration failed. Phone "${dto.phone}" already exists`);
       throw new BadRequestException("Phone already exists");
     }
 
@@ -69,6 +74,7 @@ export class AuthService {
     });
 
     const { accessToken, refreshToken } = await this.generateTokens(user);
+    this.logger.log(`Successfully registered user "${user.id}" (${user.email})`);
 
     return {
       user: { id: user.id, name: user.firstName, email: user.email },
@@ -78,8 +84,10 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    this.logger.log(`User login attempt for email: ${dto.email}`);
     const user = await this.authRepository.findByEmail(dto.email);
     if (!user) {
+      this.logger.warn(`Login failed. User with email "${dto.email}" not found`);
       throw new UnauthorizedException("Invalid email or password");
     }
 
@@ -89,12 +97,14 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException("Invalid credential");
+      this.logger.warn(`Login failed. Invalid password for user "${dto.email}"`);
+      throw new UnauthorizedException("Invalid email or password");
     }
 
     await this.authRepository.updateLastLogin(user.id);
 
     const { accessToken, refreshToken } = await this.generateTokens(user);
+    this.logger.log(`Successfully logged in user "${user.id}"`);
 
     return {
       user: { id: user.id, name: user.firstName, email: user.email },
@@ -118,11 +128,12 @@ export class AuthService {
     try {
       user = await this.jwtService.verifyAsync(refreshToken, options);
     } catch (error) {
+      this.logger.warn("Invalid or expired refresh token attempt");
       throw new UnauthorizedException("Invalid or expired refresh token");
     }
 
     if (!user) {
-      throw new UnauthorizedException("Invalid credential");
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     const dbUser = await this.authRepository.findById(user.sub);
@@ -134,10 +145,12 @@ export class AuthService {
     const isMatch = await bcrypt.compare(refreshToken, dbUser.refreshTokenHash);
 
     if (!isMatch) {
-      throw new UnauthorizedException("Invalid refrsh token");
+      this.logger.warn(`Refresh token mismatch for user "${dbUser.id}"`);
+      throw new UnauthorizedException("Invalid refresh token");
     }
 
     const tokens = await this.generateTokens(dbUser);
+    this.logger.log(`Successfully refreshed tokens for user "${dbUser.id}"`);
 
     return {
       user: { id: dbUser.id, name: dbUser.firstName, email: dbUser.email },
@@ -150,6 +163,7 @@ export class AuthService {
     if (!userId) {
       throw new UnauthorizedException("User id not found");
     }
+    this.logger.log(`Logging out user: ${userId}`);
     await this.authRepository.update(userId, { refreshTokenHash: null });
     return { message: "User logout successfully" };
   }

@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -73,8 +74,11 @@ export class AdminProviderController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
   @ApiResponse({ status: 404, description: "Provider not found" })
-  async verify(@Param("id", new ParseUUIDPipe()) id: string) {
-    return await this.adminProviderService.verifyProvider(id);
+  async verify(@Param("id", new ParseUUIDPipe()) id: string, @Req() req: any) {
+    return await this.adminProviderService.verifyProvider(
+      id,
+      req.user?.sub ?? req.user?.id,
+    );
   }
 
   @Patch(":id/reject")
@@ -96,8 +100,13 @@ export class AdminProviderController {
   async reject(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: RejectProviderDto,
+    @Req() req: any,
   ) {
-    return await this.adminProviderService.rejectProvider(id, dto);
+    return await this.adminProviderService.rejectProvider(
+      id,
+      dto,
+      req.user?.sub ?? req.user?.id,
+    );
   }
 
   @Patch(":id/suspend")
@@ -116,7 +125,10 @@ export class AdminProviderController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
   @ApiResponse({ status: 404, description: "Provider not found" })
-  async suspend(@Param("id", new ParseUUIDPipe()) id: string) {
-    return await this.adminProviderService.suspendProvider(id);
+  async suspend(@Param("id", new ParseUUIDPipe()) id: string, @Req() req: any) {
+    return await this.adminProviderService.suspendProvider(
+      id,
+      req.user?.sub ?? req.user?.id,
+    );
   }
 }

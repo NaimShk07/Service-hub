@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { ProviderServiceRepository } from "../repositories/provider-service.repository";
@@ -12,6 +13,8 @@ import { ProviderRepository } from "../repositories/provider.repository";
 
 @Injectable()
 export class ProviderServiceService {
+  private readonly logger = new Logger(ProviderServiceService.name);
+
   constructor(
     private readonly providerServiceRepository: ProviderServiceRepository,
     private readonly serviceRepository: ServiceRepository,
@@ -19,9 +22,11 @@ export class ProviderServiceService {
   ) {}
 
   async create(providerId: string, dto: CreateProviderServiceDto) {
+    this.logger.log(`Adding service "${dto.serviceId}" to provider offering: ${providerId}`);
     const service = await this.serviceRepository.findById(dto.serviceId);
 
     if (!service || !service.isActive) {
+      this.logger.warn(`Catalog service "${dto.serviceId}" not found or inactive`);
       throw new NotFoundException("Catalog service not found or inactive");
     }
 
@@ -32,10 +37,13 @@ export class ProviderServiceService {
       );
 
     if (providerService) {
+      this.logger.warn(`Service "${dto.serviceId}" is already offered by provider: ${providerId}`);
       throw new ConflictException("Service is already added to your offerings");
     }
 
-    return await this.providerServiceRepository.create(providerId, dto);
+    const created = await this.providerServiceRepository.create(providerId, dto);
+    this.logger.log(`Successfully added service offering "${created.id}" for provider: ${providerId}`);
+    return created;
   }
 
   async findAll(providerId: string) {
@@ -43,23 +51,31 @@ export class ProviderServiceService {
   }
 
   async update(providerId: string, id: string, dto: UpdateProviderServiceDto) {
+    this.logger.log(`Updating provider service offering "${id}" for provider: ${providerId}`);
     const providerService = await this.providerServiceRepository.findById(id);
 
     if (!providerService || providerService.providerId !== providerId) {
+      this.logger.warn(`Provider service offering "${id}" not found for provider: ${providerId}`);
       throw new NotFoundException("Provider service offering not found");
     }
 
-    return await this.providerServiceRepository.update(id, dto);
+    const updated = await this.providerServiceRepository.update(id, dto);
+    this.logger.log(`Successfully updated provider service offering "${id}"`);
+    return updated;
   }
 
   async remove(providerId: string, id: string) {
+    this.logger.log(`Deleting provider service offering "${id}" for provider: ${providerId}`);
     const providerService = await this.providerServiceRepository.findById(id);
 
     if (!providerService || providerService.providerId !== providerId) {
+      this.logger.warn(`Provider service offering "${id}" not found for provider: ${providerId}`);
       throw new NotFoundException("Provider service offering not found");
     }
 
-    return await this.providerServiceRepository.delete(id);
+    const result = await this.providerServiceRepository.delete(id);
+    this.logger.log(`Successfully deleted provider service offering "${id}"`);
+    return result;
   }
 
   async getPublicProviderServices(
