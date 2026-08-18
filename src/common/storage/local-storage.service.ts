@@ -11,7 +11,9 @@ export class LocalStorageService implements StorageService {
   private readonly uploadRoot = path.join(process.cwd(), "uploads");
 
   async uploadFile(file: Express.Multer.File, folder: string): Promise<string> {
-    this.logger.log(`Uploading file "${file.originalname}" to folder "${folder}"`);
+    this.logger.log(
+      `Uploading file "${file.originalname}" to folder "${folder}"`,
+    );
     const uploadDir = path.join(this.uploadRoot, folder);
 
     // Make sure directory exists
@@ -42,7 +44,9 @@ export class LocalStorageService implements StorageService {
     } catch (error: any) {
       // File already doesn't exist
       if (error.code !== "ENOENT") {
-        this.logger.error(`Error deleting file "${filePath}": ${error.message}`);
+        this.logger.error(
+          `Error deleting file "${filePath}": ${error.message}`,
+        );
         throw error;
       }
     }

@@ -1,8 +1,14 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { ProviderAvailabilityRepository } from "../repositories/provider-availability.repositor";
 import { AvailabityIntervalDto } from "../dto/availability-interval.dto";
 import { SetAvailabilityDto } from "../dto/set-availability.dto";
 import { ProviderServiceRepository } from "../repositories/provider-service.repository";
+import { QuerySlotDto } from "../dto/query-slot.dto";
 
 @Injectable()
 export class ProviderAvailabilityService {
@@ -53,6 +59,81 @@ export class ProviderAvailabilityService {
     return result;
   }
 
+  async generateSlot(
+    providerId: string,
+    queryDto: QuerySlotDto,
+    existingBookings: any[] = [],
+  ) {
+    const providerService =
+      await this.providerServiceRepository.findByProviderAndServiceId(
+        providerId,
+        queryDto.serviceId,
+      );
+
+    if (!providerService || !providerService.isActive) {
+      throw new NotFoundException(
+        "Provider service offering not found or inactive",
+      );
+    }
+
+    const { durationMinutes, bufferMinutes } = providerService;
+
+    const dateObj = new Date(queryDto.date + "T00:00:00Z");
+    const weekday = dateObj.getUTCDay();
+
+    const providerAvailability =
+      await this.providerAvailabilityRepository.findByProviderIdAndWeekday(
+        providerId,
+        weekday,
+      );
+
+    const slots: Array<{
+      startsAt: string;
+      endsAt: string;
+      available: boolean;
+    }> = [];
+
+    for (const window of providerAvailability) {
+      const windowStart = this.timeToMinutes(window.startTime);
+      const windowEnd = this.timeToMinutes(window.endTime);
+
+      let currentStart = windowStart;
+
+      while (currentStart + durationMinutes <= windowEnd) {
+        const slotEndMinutes = currentStart + durationMinutes;
+
+        const startTimeStr = this.minutesToTimeString(currentStart);
+        const endTimeStr = this.minutesToTimeString(slotEndMinutes);
+
+        const startsAt = this.formatISOString(queryDto.date, startTimeStr);
+        const endsAt = this.formatISOString(queryDto.date, endTimeStr);
+
+        // Architected for Week 4 booking conflict checks:
+        // isAvailable can evaluate against existingBookings overlap in Week 4.
+        const isAvailable = true;
+
+        slots.push({
+          startsAt,
+          endsAt,
+          available: isAvailable,
+        });
+
+        currentStart += durationMinutes + (bufferMinutes || 0);
+      }
+    }
+
+    return {
+      date: queryDto.date,
+      service: {
+        id: providerService.id,
+        serviceId: providerService.serviceId,
+        durationMinutes: providerService.durationMinutes,
+        bufferMinutes: providerService.bufferMinutes,
+      },
+      slots,
+    };
+  }
+
   private timeToMinutes(timeStr: string): number {
     const parts = timeStr.split(":");
 
@@ -60,6 +141,18 @@ export class ProviderAvailabilityService {
     const minutes = Number(parts[1]);
 
     return hours * 60 + minutes;
+  }
+
+  private minutesToTimeString(totalMinutes: number): string {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const hh = hours.toString().padStart(2, "0");
+    const mm = minutes.toString().padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  private formatISOString(dateStr: string, timeStr: string): string {
+    return `${dateStr}T${timeStr}:00+05:30`;
   }
 
   private validateSchedules(

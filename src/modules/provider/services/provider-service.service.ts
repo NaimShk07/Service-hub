@@ -22,11 +22,15 @@ export class ProviderServiceService {
   ) {}
 
   async create(providerId: string, dto: CreateProviderServiceDto) {
-    this.logger.log(`Adding service "${dto.serviceId}" to provider offering: ${providerId}`);
+    this.logger.log(
+      `Adding service "${dto.serviceId}" to provider offering: ${providerId}`,
+    );
     const service = await this.serviceRepository.findById(dto.serviceId);
 
     if (!service || !service.isActive) {
-      this.logger.warn(`Catalog service "${dto.serviceId}" not found or inactive`);
+      this.logger.warn(
+        `Catalog service "${dto.serviceId}" not found or inactive`,
+      );
       throw new NotFoundException("Catalog service not found or inactive");
     }
 
@@ -37,12 +41,19 @@ export class ProviderServiceService {
       );
 
     if (providerService) {
-      this.logger.warn(`Service "${dto.serviceId}" is already offered by provider: ${providerId}`);
+      this.logger.warn(
+        `Service "${dto.serviceId}" is already offered by provider: ${providerId}`,
+      );
       throw new ConflictException("Service is already added to your offerings");
     }
 
-    const created = await this.providerServiceRepository.create(providerId, dto);
-    this.logger.log(`Successfully added service offering "${created.id}" for provider: ${providerId}`);
+    const created = await this.providerServiceRepository.create(
+      providerId,
+      dto,
+    );
+    this.logger.log(
+      `Successfully added service offering "${created.id}" for provider: ${providerId}`,
+    );
     return created;
   }
 
@@ -51,11 +62,15 @@ export class ProviderServiceService {
   }
 
   async update(providerId: string, id: string, dto: UpdateProviderServiceDto) {
-    this.logger.log(`Updating provider service offering "${id}" for provider: ${providerId}`);
+    this.logger.log(
+      `Updating provider service offering "${id}" for provider: ${providerId}`,
+    );
     const providerService = await this.providerServiceRepository.findById(id);
 
     if (!providerService || providerService.providerId !== providerId) {
-      this.logger.warn(`Provider service offering "${id}" not found for provider: ${providerId}`);
+      this.logger.warn(
+        `Provider service offering "${id}" not found for provider: ${providerId}`,
+      );
       throw new NotFoundException("Provider service offering not found");
     }
 
@@ -65,11 +80,15 @@ export class ProviderServiceService {
   }
 
   async remove(providerId: string, id: string) {
-    this.logger.log(`Deleting provider service offering "${id}" for provider: ${providerId}`);
+    this.logger.log(
+      `Deleting provider service offering "${id}" for provider: ${providerId}`,
+    );
     const providerService = await this.providerServiceRepository.findById(id);
 
     if (!providerService || providerService.providerId !== providerId) {
-      this.logger.warn(`Provider service offering "${id}" not found for provider: ${providerId}`);
+      this.logger.warn(
+        `Provider service offering "${id}" not found for provider: ${providerId}`,
+      );
       throw new NotFoundException("Provider service offering not found");
     }
 

@@ -30,7 +30,9 @@ export class AdminProviderService {
   }
 
   async verifyProvider(id: string, actorUserId?: string) {
-    this.logger.log(`Admin (${actorUserId ?? "system"}) verifying provider profile: ${id}`);
+    this.logger.log(
+      `Admin (${actorUserId ?? "system"}) verifying provider profile: ${id}`,
+    );
     const existing = await this.findOne(id);
 
     const result = await this.adminProviderRepository.updateVerificationStatus(
@@ -51,8 +53,14 @@ export class AdminProviderService {
     return result;
   }
 
-  async rejectProvider(id: string, dto: RejectProviderDto, actorUserId?: string) {
-    this.logger.log(`Admin (${actorUserId ?? "system"}) rejecting provider profile: ${id}`);
+  async rejectProvider(
+    id: string,
+    dto: RejectProviderDto,
+    actorUserId?: string,
+  ) {
+    this.logger.log(
+      `Admin (${actorUserId ?? "system"}) rejecting provider profile: ${id}`,
+    );
     const existing = await this.findOne(id);
 
     const result = await this.adminProviderRepository.updateVerificationStatus(
@@ -67,7 +75,10 @@ export class AdminProviderService {
       entityId: id,
       action: AuditAction.PROVIDER_VERIFIED,
       oldValue: { status: existing.verificationStatus },
-      newValue: { status: VerificationStatus.REJECTED, rejectReason: dto.rejectReason },
+      newValue: {
+        status: VerificationStatus.REJECTED,
+        rejectReason: dto.rejectReason,
+      },
     });
 
     this.logger.log(`Successfully rejected provider profile: ${id}`);
@@ -75,7 +86,9 @@ export class AdminProviderService {
   }
 
   async suspendProvider(id: string, actorUserId?: string) {
-    this.logger.log(`Admin (${actorUserId ?? "system"}) suspending provider profile: ${id}`);
+    this.logger.log(
+      `Admin (${actorUserId ?? "system"}) suspending provider profile: ${id}`,
+    );
     const existing = await this.findOne(id);
 
     const result = await this.adminProviderRepository.updateVerificationStatus(

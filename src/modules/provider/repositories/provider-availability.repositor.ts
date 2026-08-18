@@ -26,4 +26,15 @@ export class ProviderAvailabilityRepository {
       }),
     ]);
   }
+
+  async findByProviderIdAndWeekday(providerId: string, weekday: number) {
+    return await this.prisma.availability.findMany({
+      where: {
+        providerId,
+        weekday,
+        isAvailable: true,
+      },
+      orderBy: { startTime: "asc" },
+    });
+  }
 }

@@ -51,14 +51,18 @@ export class AuthService {
     const emailExists = await this.authRepository.findByEmail(dto.email);
 
     if (emailExists) {
-      this.logger.warn(`Registration failed. Email "${dto.email}" already exists`);
+      this.logger.warn(
+        `Registration failed. Email "${dto.email}" already exists`,
+      );
       throw new BadRequestException("Email already exists");
     }
 
     const phoneExists = await this.authRepository.findByPhone(dto.phone);
 
     if (phoneExists) {
-      this.logger.warn(`Registration failed. Phone "${dto.phone}" already exists`);
+      this.logger.warn(
+        `Registration failed. Phone "${dto.phone}" already exists`,
+      );
       throw new BadRequestException("Phone already exists");
     }
 
@@ -74,7 +78,9 @@ export class AuthService {
     });
 
     const { accessToken, refreshToken } = await this.generateTokens(user);
-    this.logger.log(`Successfully registered user "${user.id}" (${user.email})`);
+    this.logger.log(
+      `Successfully registered user "${user.id}" (${user.email})`,
+    );
 
     return {
       user: { id: user.id, name: user.firstName, email: user.email },
@@ -87,7 +93,9 @@ export class AuthService {
     this.logger.log(`User login attempt for email: ${dto.email}`);
     const user = await this.authRepository.findByEmail(dto.email);
     if (!user) {
-      this.logger.warn(`Login failed. User with email "${dto.email}" not found`);
+      this.logger.warn(
+        `Login failed. User with email "${dto.email}" not found`,
+      );
       throw new UnauthorizedException("Invalid email or password");
     }
 
@@ -97,7 +105,9 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      this.logger.warn(`Login failed. Invalid password for user "${dto.email}"`);
+      this.logger.warn(
+        `Login failed. Invalid password for user "${dto.email}"`,
+      );
       throw new UnauthorizedException("Invalid email or password");
     }
 

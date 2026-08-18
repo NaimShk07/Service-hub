@@ -37,6 +37,8 @@ import { Roles } from "@common/decorators/roles.decorator";
 import { DocumentType, Role } from "@prisma-client/enums";
 import { ProviderServiceService } from "../services/provider-service.service";
 import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
+import { ProviderAvailabilityService } from "../services/provider-availability.service";
+import { QuerySlotDto } from "../dto/query-slot.dto";
 
 @ApiTags("Providers")
 @Controller("")
@@ -44,6 +46,7 @@ export class ProviderController {
   constructor(
     private readonly providerService: ProviderService,
     private readonly providerServiceService: ProviderServiceService,
+    private readonly providerAvailabilityService: ProviderAvailabilityService,
   ) {}
 
   @Post("me/provider")
@@ -218,6 +221,39 @@ export class ProviderController {
   ) {
     return await this.providerServiceService.getPublicProviderServices(
       id,
+      queryDto,
+    );
+  }
+
+  @Get("providers/:providerId/slots")
+  @ApiOperation({
+    summary:
+      "Get dynamically generated available booking slots for a provider service and date",
+  })
+  @ApiParam({
+    name: "providerId",
+    description: "Provider profile UUID",
+    type: String,
+    format: "uuid",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Dynamically generated time slots retrieved successfully",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid parameters or date format",
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Provider or service offering not found",
+  })
+  async getAvailableSlots(
+    @Param("providerId", new ParseUUIDPipe()) providerId: string,
+    @Query() queryDto: QuerySlotDto,
+  ) {
+    return await this.providerAvailabilityService.generateSlot(
+      providerId,
       queryDto,
     );
   }

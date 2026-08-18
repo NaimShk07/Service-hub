@@ -7,6 +7,10 @@ import { AuditLogRepository } from "@database/repositories/audit-log.repository"
 @Module({
   imports: [],
   controllers: [AdminProviderController],
-  providers: [AdminProviderService, AdminProviderRepository, AuditLogRepository],
+  providers: [
+    AdminProviderService,
+    AdminProviderRepository,
+    AuditLogRepository,
+  ],
 })
 export class AdminModule {}
