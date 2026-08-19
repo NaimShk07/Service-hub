@@ -25,7 +25,14 @@ export class ProviderServiceService {
     this.logger.log(
       `Adding service "${dto.serviceId}" to provider offering: ${providerId}`,
     );
-    const service = await this.serviceRepository.findById(dto.serviceId);
+
+    const [service, existingOffering] = await Promise.all([
+      this.serviceRepository.findById(dto.serviceId),
+      this.providerServiceRepository.findByProviderAndServiceId(
+        providerId,
+        dto.serviceId,
+      ),
+    ]);
 
     if (!service || !service.isActive) {
       this.logger.warn(
@@ -34,13 +41,7 @@ export class ProviderServiceService {
       throw new NotFoundException("Catalog service not found or inactive");
     }
 
-    const providerService =
-      await this.providerServiceRepository.findByProviderAndServiceId(
-        providerId,
-        dto.serviceId,
-      );
-
-    if (providerService) {
+    if (existingOffering) {
       this.logger.warn(
         `Service "${dto.serviceId}" is already offered by provider: ${providerId}`,
       );

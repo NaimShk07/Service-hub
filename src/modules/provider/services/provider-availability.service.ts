@@ -64,11 +64,28 @@ export class ProviderAvailabilityService {
     queryDto: QuerySlotDto,
     existingBookings: any[] = [],
   ) {
-    const providerService =
-      await this.providerServiceRepository.findByProviderAndServiceId(
+    const queryDate = new Date(queryDto.date + "T00:00:00Z");
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    if (queryDate < today) {
+      throw new BadRequestException(
+        "Past dates are not allowed for available slot queries",
+      );
+    }
+
+    const weekday = queryDate.getUTCDay();
+
+    const [providerService, providerAvailability] = await Promise.all([
+      this.providerServiceRepository.findByProviderAndServiceId(
         providerId,
         queryDto.serviceId,
-      );
+      ),
+      this.providerAvailabilityRepository.findByProviderIdAndWeekday(
+        providerId,
+        weekday,
+      ),
+    ]);
 
     if (!providerService || !providerService.isActive) {
       throw new NotFoundException(
@@ -77,15 +94,6 @@ export class ProviderAvailabilityService {
     }
 
     const { durationMinutes, bufferMinutes } = providerService;
-
-    const dateObj = new Date(queryDto.date + "T00:00:00Z");
-    const weekday = dateObj.getUTCDay();
-
-    const providerAvailability =
-      await this.providerAvailabilityRepository.findByProviderIdAndWeekday(
-        providerId,
-        weekday,
-      );
 
     const slots: Array<{
       startsAt: string;

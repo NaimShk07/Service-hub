@@ -42,7 +42,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } else if (typeof exceptionResponse === "string") {
       message = exceptionResponse;
     } else if (exception instanceof Error) {
-      message = exception.message;
+      message =
+        status !== 500 && process.env.NODE_ENV !== "production"
+          ? exception.message
+          : "Internal Server Error";
     }
 
     response.status(status).json({

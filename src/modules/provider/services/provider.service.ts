@@ -23,16 +23,16 @@ export class ProviderService {
 
   async createProfile(userId: string, dto: CreateProviderDto) {
     this.logger.log(`Creating provider profile for user: ${userId}`);
-    const isUserExist = await this.providerRepository.findByUserId(userId);
+
+    const [isUserExist, isDuplicate] = await Promise.all([
+      this.providerRepository.findByUserId(userId),
+      this.providerRepository.findByBusinessName(dto.businessName),
+    ]);
 
     if (isUserExist) {
       this.logger.warn(`User ${userId} is already registered as a provider`);
       throw new ConflictException("User is already registered as a provider");
     }
-
-    const isDuplicate = await this.providerRepository.findByBusinessName(
-      dto.businessName,
-    );
 
     if (isDuplicate) {
       this.logger.warn(`Business name "${dto.businessName}" already exists`);
@@ -146,8 +146,14 @@ export class ProviderService {
   }
 
   async getPublicProfileById(providerId: string) {
-    await this.getProfileById(providerId);
+    const provider = await this.providerRepository.findPublicById(providerId);
 
-    return await this.providerRepository.findPublicById(providerId);
+    if (!provider) {
+      throw new NotFoundException(
+        `Provider profile with ID "${providerId}" not found`,
+      );
+    }
+
+    return provider;
   }
 }
