@@ -10,6 +10,10 @@ import { UpdateProviderDto } from "../dto/update-provider.dto";
 import { DocumentRepository } from "../repositories/document.repository";
 import { UploadDocumentDto } from "../dto/upload-document.dto";
 import { StorageService } from "@common/storage/storage.service";
+import {
+  ProviderSearchSort,
+  QueryProviderSearchDto,
+} from "../dto/query-provider-search.dto";
 
 @Injectable()
 export class ProviderService {
@@ -155,5 +159,58 @@ export class ProviderService {
     }
 
     return provider;
+  }
+
+  async searchPublicProviders(queryDto: QueryProviderSearchDto) {
+    const { items, total, page, limit } =
+      await this.providerRepository.findPublicProviders(queryDto);
+
+    const formattedItems = items.map((provider) => {
+      const activeServices = provider.services.map((ps) => ({
+        id: ps.id,
+        name: ps.service.name,
+        categoryName: ps.service.category.name,
+        price: Number(ps.price),
+      }));
+
+      const prices = activeServices.map((s) => s.price);
+      const startingPrice = prices.length > 0 ? Math.min(...prices) : null;
+      const primaryCity = provider.locations[0]?.city || null;
+
+      return {
+        providerId: provider.id,
+        businessName: provider.businessName,
+        profileImage: provider.profileImageUrl,
+        city: primaryCity,
+        averageRating: provider.averageRating,
+        totalReviews: provider.totalReviews,
+        startingPrice,
+        services: activeServices,
+      };
+    });
+
+    if (queryDto.sort === ProviderSearchSort.PRICE_ASC) {
+      formattedItems.sort(
+        (a, b) => (a.startingPrice ?? Infinity) - (b.startingPrice ?? Infinity),
+      );
+    } else if (queryDto.sort === ProviderSearchSort.PRICE_DESC) {
+      formattedItems.sort(
+        (a, b) =>
+          (b.startingPrice ?? -Infinity) - (a.startingPrice ?? -Infinity),
+      );
+    }
+
+    return {
+      success: true,
+      data: {
+        items: formattedItems,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    };
   }
 }

@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { PrismaModule } from "./database/prisma/prisma.module";
@@ -12,6 +12,8 @@ import { StorageModule } from "@common/storage/storage.module";
 import { ServeStaticModule } from "@nestjs/serve-static";
 import { join } from "path";
 import { AdminModule } from "@modules/admin/admin.module";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { APP_GUARD } from "@nestjs/core";
 
 @Module({
   imports: [
@@ -25,6 +27,16 @@ import { AdminModule } from "@modules/admin/admin.module";
       rootPath: join(process.cwd(), "uploads"),
       serveRoot: "/uploads",
     }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: 60000, // 60 seconds (1 minute window)
+          limit: 100, // Default global limit: 100 requests per minute
+        },
+      ],
+    }),
     PrismaModule,
     AuthModule,
     CatalogsModule,
@@ -34,6 +46,12 @@ import { AdminModule } from "@modules/admin/admin.module";
     AdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

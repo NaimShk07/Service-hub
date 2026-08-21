@@ -39,6 +39,7 @@ import { ProviderServiceService } from "../services/provider-service.service";
 import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
 import { ProviderAvailabilityService } from "../services/provider-availability.service";
 import { QuerySlotDto } from "../dto/query-slot.dto";
+import { QueryProviderSearchDto } from "../dto/query-provider-search.dto";
 
 @ApiTags("Providers")
 @Controller("")
@@ -178,6 +179,20 @@ export class ProviderController {
     @Param("id", new ParseUUIDPipe()) providerId: string,
   ) {
     return await this.providerService.getProviderDocumentsForAdmin(providerId);
+  }
+
+  @Get("providers")
+  @ApiOperation({ summary: "Get paginated summary list of verified providers" })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated provider list retrieved successfully",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid query parameter format or range constraints",
+  })
+  async searchProvider(@Query() queryDto: QueryProviderSearchDto) {
+    return this.providerService.searchPublicProviders(queryDto);
   }
 
   @Get("providers/:id")

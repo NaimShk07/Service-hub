@@ -8,6 +8,7 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 import cookieParser from "cookie-parser";
 import { LoggingInterceptor } from "@common/interceptors/logging.interceptor";
 import helmet from "helmet";
+import { PrismaClientExceptionFilter } from "@common/filters/prisma-client-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -46,7 +47,10 @@ async function bootstrap() {
   );
 
   // Global Exception Filter & Response Interceptor
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalFilters(
+    new HttpExceptionFilter(),
+    new PrismaClientExceptionFilter(),
+  );
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalInterceptors(new LoggingInterceptor());
 

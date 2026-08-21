@@ -22,6 +22,7 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 
 @Controller("auth")
 @ApiTags("Auth")
@@ -31,6 +32,7 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per 60 seconds
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: "Register a new user" })
@@ -54,6 +56,7 @@ export class AuthController {
     return { user: data.user, accessToken: data.accessToken };
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 requests per 60 seconds
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Log in user" })
@@ -75,6 +78,7 @@ export class AuthController {
     return { user: data.user, accessToken: data.accessToken };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per 60 seconds
   @Post("/refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token using refresh cookie" })
