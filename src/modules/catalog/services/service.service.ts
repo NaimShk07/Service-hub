@@ -10,6 +10,7 @@ import { QueryServiceDto } from "../dto/service/query-service.dto";
 import { CategoryRepository } from "../repositories/category.repository";
 import { CreateServiceDto } from "../dto/service/create-service.dto";
 import { generateSlug } from "@common/utils/slug.util";
+import { RedisService } from "@common/cache/redis.service";
 
 @Injectable()
 export class ServiceService {
@@ -18,6 +19,7 @@ export class ServiceService {
   constructor(
     private readonly serviceRepository: ServiceRepository,
     private readonly categoryRepository: CategoryRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async create(dto: CreateServiceDto) {
@@ -52,11 +54,20 @@ export class ServiceService {
     this.logger.log(
       `Successfully created service "${service.name}" (${service.id})`,
     );
+    await this.redisService.del("services:all");
     return service;
   }
 
   async findAll(queryDto: QueryServiceDto) {
-    return await this.serviceRepository.findAllPaginated(queryDto);
+    const cached = await this.redisService.get("services:all");
+    if (cached) {
+      return cached;
+    }
+
+    const data = await this.serviceRepository.findAllPaginated(queryDto);
+    await this.redisService.set("services:all", data, 3600);
+
+    return data;
   }
 
   async findOne(id: string) {
@@ -111,6 +122,7 @@ export class ServiceService {
       ...(slug && { slug }),
     });
     this.logger.log(`Successfully updated service "${id}"`);
+    await this.redisService.del("services:all");
     return updated;
   }
 
@@ -130,6 +142,7 @@ export class ServiceService {
 
     const result = await this.serviceRepository.delete(id);
     this.logger.log(`Successfully deleted service "${id}"`);
+    await this.redisService.del("services:all");
     return result;
   }
 }

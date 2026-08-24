@@ -14,6 +14,7 @@ import { join } from "path";
 import { AdminModule } from "@modules/admin/admin.module";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
+import { CacheModule } from "@common/cache/cache.module";
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { APP_GUARD } from "@nestjs/core";
     HealthModule,
     StorageModule,
     AdminModule,
+    CacheModule,
   ],
   controllers: [AppController],
   providers: [

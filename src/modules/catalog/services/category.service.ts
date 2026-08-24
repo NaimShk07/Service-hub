@@ -9,15 +9,27 @@ import { CreateCategoryDto } from "../dto/category/create-category.dto";
 import { UpdateCategoryDto } from "../dto/category/update-category.dto";
 import { QueryCategoryDto } from "../dto/category/query-category.dto";
 import { generateSlug } from "@common/utils/slug.util";
+import { RedisService } from "@common/cache/redis.service";
 
 @Injectable()
 export class CategoryService {
   private readonly logger = new Logger(CategoryService.name);
 
-  constructor(private readonly categoryRepository: CategoryRepository) {}
+  constructor(
+    private readonly categoryRepository: CategoryRepository,
+    private readonly redisService: RedisService,
+  ) {}
 
   async findAll(queryDto: QueryCategoryDto) {
-    return await this.categoryRepository.findAllPaginated(queryDto);
+    const cached = await this.redisService.get("categories:all");
+    if (cached) {
+      return cached;
+    }
+
+    const data = await this.categoryRepository.findAllPaginated(queryDto);
+    await this.redisService.set("categories:all", data, 3600);
+
+    return data;
   }
 
   async findOne(id: string) {
@@ -43,6 +55,7 @@ export class CategoryService {
     this.logger.log(
       `Successfully created category "${category.name}" (${category.id})`,
     );
+    await this.redisService.del("categories:all");
     return category;
   }
 
@@ -69,6 +82,7 @@ export class CategoryService {
       ...(slug && { slug }),
     });
     this.logger.log(`Successfully updated category "${id}"`);
+    await this.redisService.del("categories:all");
     return updated;
   }
 
@@ -87,6 +101,7 @@ export class CategoryService {
     }
     const result = await this.categoryRepository.delete(id);
     this.logger.log(`Successfully deleted category "${id}"`);
+    await this.redisService.del("categories:all");
     return result;
   }
 }

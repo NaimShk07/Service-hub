@@ -10,6 +10,8 @@ import { SetAvailabilityDto } from "../dto/set-availability.dto";
 import { ProviderServiceRepository } from "../repositories/provider-service.repository";
 import { QuerySlotDto } from "../dto/query-slot.dto";
 
+import { RedisService } from "@common/cache/redis.service";
+
 @Injectable()
 export class ProviderAvailabilityService {
   private readonly logger = new Logger(ProviderAvailabilityService.name);
@@ -17,6 +19,7 @@ export class ProviderAvailabilityService {
   constructor(
     private readonly providerAvailabilityRepository: ProviderAvailabilityRepository,
     private readonly providerServiceRepository: ProviderServiceRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async getAvailibity(providerId: string) {
@@ -56,6 +59,7 @@ export class ProviderAvailabilityService {
     this.logger.log(
       `Successfully updated availability schedule for provider: ${providerId}`,
     );
+    await this.redisService.delByPattern("providers:search:*");
     return result;
   }
 

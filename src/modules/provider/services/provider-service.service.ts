@@ -11,6 +11,8 @@ import { CreateProviderServiceDto } from "../dto/create-provider-service.dto";
 import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
 import { ProviderRepository } from "../repositories/provider.repository";
 
+import { RedisService } from "@common/cache/redis.service";
+
 @Injectable()
 export class ProviderServiceService {
   private readonly logger = new Logger(ProviderServiceService.name);
@@ -19,6 +21,7 @@ export class ProviderServiceService {
     private readonly providerServiceRepository: ProviderServiceRepository,
     private readonly serviceRepository: ServiceRepository,
     private readonly providerRepository: ProviderRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async create(providerId: string, dto: CreateProviderServiceDto) {
@@ -55,6 +58,8 @@ export class ProviderServiceService {
     this.logger.log(
       `Successfully added service offering "${created.id}" for provider: ${providerId}`,
     );
+    await this.redisService.del(`provider:profile:${providerId}`);
+    await this.redisService.delByPattern("providers:search:*");
     return created;
   }
 
@@ -77,6 +82,8 @@ export class ProviderServiceService {
 
     const updated = await this.providerServiceRepository.update(id, dto);
     this.logger.log(`Successfully updated provider service offering "${id}"`);
+    await this.redisService.del(`provider:profile:${providerId}`);
+    await this.redisService.delByPattern("providers:search:*");
     return updated;
   }
 
@@ -95,6 +102,8 @@ export class ProviderServiceService {
 
     const result = await this.providerServiceRepository.delete(id);
     this.logger.log(`Successfully deleted provider service offering "${id}"`);
+    await this.redisService.del(`provider:profile:${providerId}`);
+    await this.redisService.delByPattern("providers:search:*");
     return result;
   }
 

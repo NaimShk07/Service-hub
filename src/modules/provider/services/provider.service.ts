@@ -14,6 +14,8 @@ import {
   ProviderSearchSort,
   QueryProviderSearchDto,
 } from "../dto/query-provider-search.dto";
+import { RedisService } from "@common/cache/redis.service";
+import { buildNormalizedQueryKey } from "@common/utils/cache-key-builder.util";
 
 @Injectable()
 export class ProviderService {
@@ -23,6 +25,7 @@ export class ProviderService {
     private readonly providerRepository: ProviderRepository,
     private readonly documentRepository: DocumentRepository,
     private readonly storageService: StorageService,
+    private readonly redisService: RedisService,
   ) {}
 
   async createProfile(userId: string, dto: CreateProviderDto) {
@@ -87,6 +90,8 @@ export class ProviderService {
 
     const updated = await this.providerRepository.update(profile.id, dto);
     this.logger.log(`Successfully updated provider profile: ${profile.id}`);
+    await this.redisService.del(`provider:profile:${profile.id}`);
+    await this.redisService.delByPattern("providers:search:*");
     return updated;
   }
 
@@ -150,6 +155,13 @@ export class ProviderService {
   }
 
   async getPublicProfileById(providerId: string) {
+    const cached = await this.redisService.get(
+      `provider:profile:${providerId}`,
+    );
+    if (cached) {
+      return cached;
+    }
+
     const provider = await this.providerRepository.findPublicById(providerId);
 
     if (!provider) {
@@ -158,10 +170,23 @@ export class ProviderService {
       );
     }
 
+    await this.redisService.set(
+      `provider:profile:${providerId}`,
+      provider,
+      900,
+    );
+
     return provider;
   }
 
   async searchPublicProviders(queryDto: QueryProviderSearchDto) {
+    const cacheKey = buildNormalizedQueryKey("providers:search", queryDto);
+
+    const cached = await this.redisService.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const { items, total, page, limit } =
       await this.providerRepository.findPublicProviders(queryDto);
 
@@ -200,7 +225,7 @@ export class ProviderService {
       );
     }
 
-    return {
+    const result = {
       success: true,
       data: {
         items: formattedItems,
@@ -212,5 +237,9 @@ export class ProviderService {
         },
       },
     };
+
+    await this.redisService.set(cacheKey, result, 300);
+
+    return result;
   }
 }

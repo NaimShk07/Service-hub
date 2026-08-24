@@ -4,6 +4,7 @@ import { QueryAdminProviderDto } from "../dto/query-admin-provider.dto";
 import { AuditAction, VerificationStatus } from "@prisma-client/enums";
 import { RejectProviderDto } from "../dto/reject-provider.dto";
 import { AuditLogRepository } from "@database/repositories/audit-log.repository";
+import { RedisService } from "@common/cache/redis.service";
 
 @Injectable()
 export class AdminProviderService {
@@ -12,6 +13,7 @@ export class AdminProviderService {
   constructor(
     private readonly adminProviderRepository: AdminProviderRepository,
     private readonly auditLogRepository: AuditLogRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async findAll(queryDto: QueryAdminProviderDto) {
@@ -50,6 +52,8 @@ export class AdminProviderService {
     });
 
     this.logger.log(`Successfully verified provider profile: ${id}`);
+    await this.redisService.del(`provider:profile:${id}`);
+    await this.redisService.delByPattern("providers:search:*");
     return result;
   }
 
