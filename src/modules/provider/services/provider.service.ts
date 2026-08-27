@@ -16,6 +16,7 @@ import {
 } from "../dto/query-provider-search.dto";
 import { RedisService } from "@common/cache/redis.service";
 import { buildNormalizedQueryKey } from "@common/utils/cache-key-builder.util";
+import { CACHE_TTL } from "@common/constants/cache-ttl.constant";
 
 @Injectable()
 export class ProviderService {
@@ -91,7 +92,7 @@ export class ProviderService {
     const updated = await this.providerRepository.update(profile.id, dto);
     this.logger.log(`Successfully updated provider profile: ${profile.id}`);
     await this.redisService.del(`provider:profile:${profile.id}`);
-    await this.redisService.delByPattern("providers:search:*");
+    await this.redisService.incrementSearchVersion();
     return updated;
   }
 
@@ -155,91 +156,86 @@ export class ProviderService {
   }
 
   async getPublicProfileById(providerId: string) {
-    const cached = await this.redisService.get(
+    return await this.redisService.getOrSet(
       `provider:profile:${providerId}`,
+      async () => {
+        const provider =
+          await this.providerRepository.findPublicById(providerId);
+
+        if (!provider) {
+          throw new NotFoundException(
+            `Provider profile with ID "${providerId}" not found`,
+          );
+        }
+        return provider;
+      },
+      CACHE_TTL.PROVIDER_DETAIL,
     );
-    if (cached) {
-      return cached;
-    }
-
-    const provider = await this.providerRepository.findPublicById(providerId);
-
-    if (!provider) {
-      throw new NotFoundException(
-        `Provider profile with ID "${providerId}" not found`,
-      );
-    }
-
-    await this.redisService.set(
-      `provider:profile:${providerId}`,
-      provider,
-      900,
-    );
-
-    return provider;
   }
 
   async searchPublicProviders(queryDto: QueryProviderSearchDto) {
-    const cacheKey = buildNormalizedQueryKey("providers:search", queryDto);
+    const version = await this.redisService.getSearchVersion();
+    const cacheKey = buildNormalizedQueryKey(
+      "providers:search",
+      version,
+      queryDto,
+    );
 
-    const cached = await this.redisService.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    return await this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const { items, total, page, limit } =
+          await this.providerRepository.findPublicProviders(queryDto);
 
-    const { items, total, page, limit } =
-      await this.providerRepository.findPublicProviders(queryDto);
+        const formattedItems = items.map((provider) => {
+          const activeServices = provider.services.map((ps) => ({
+            id: ps.id,
+            name: ps.service.name,
+            categoryName: ps.service.category.name,
+            price: Number(ps.price),
+          }));
 
-    const formattedItems = items.map((provider) => {
-      const activeServices = provider.services.map((ps) => ({
-        id: ps.id,
-        name: ps.service.name,
-        categoryName: ps.service.category.name,
-        price: Number(ps.price),
-      }));
+          const prices = activeServices.map((s) => s.price);
+          const startingPrice = prices.length > 0 ? Math.min(...prices) : null;
+          const primaryCity = provider.locations[0]?.city || null;
 
-      const prices = activeServices.map((s) => s.price);
-      const startingPrice = prices.length > 0 ? Math.min(...prices) : null;
-      const primaryCity = provider.locations[0]?.city || null;
+          return {
+            providerId: provider.id,
+            businessName: provider.businessName,
+            profileImage: provider.profileImageUrl,
+            city: primaryCity,
+            averageRating: provider.averageRating,
+            totalReviews: provider.totalReviews,
+            startingPrice,
+            services: activeServices,
+          };
+        });
 
-      return {
-        providerId: provider.id,
-        businessName: provider.businessName,
-        profileImage: provider.profileImageUrl,
-        city: primaryCity,
-        averageRating: provider.averageRating,
-        totalReviews: provider.totalReviews,
-        startingPrice,
-        services: activeServices,
-      };
-    });
+        if (queryDto.sort === ProviderSearchSort.PRICE_ASC) {
+          formattedItems.sort(
+            (a, b) =>
+              (a.startingPrice ?? Infinity) - (b.startingPrice ?? Infinity),
+          );
+        } else if (queryDto.sort === ProviderSearchSort.PRICE_DESC) {
+          formattedItems.sort(
+            (a, b) =>
+              (b.startingPrice ?? -Infinity) - (a.startingPrice ?? -Infinity),
+          );
+        }
 
-    if (queryDto.sort === ProviderSearchSort.PRICE_ASC) {
-      formattedItems.sort(
-        (a, b) => (a.startingPrice ?? Infinity) - (b.startingPrice ?? Infinity),
-      );
-    } else if (queryDto.sort === ProviderSearchSort.PRICE_DESC) {
-      formattedItems.sort(
-        (a, b) =>
-          (b.startingPrice ?? -Infinity) - (a.startingPrice ?? -Infinity),
-      );
-    }
+        const result = {
+          items: formattedItems,
+          meta: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        };
 
-    const result = {
-      success: true,
-      data: {
-        items: formattedItems,
-        meta: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+        return result;
       },
-    };
-
-    await this.redisService.set(cacheKey, result, 300);
-
-    return result;
+      CACHE_TTL.SEARCH_RESULTS,
+    );
   }
 }

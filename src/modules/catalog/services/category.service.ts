@@ -10,6 +10,7 @@ import { UpdateCategoryDto } from "../dto/category/update-category.dto";
 import { QueryCategoryDto } from "../dto/category/query-category.dto";
 import { generateSlug } from "@common/utils/slug.util";
 import { RedisService } from "@common/cache/redis.service";
+import { CACHE_TTL } from "@common/constants/cache-ttl.constant";
 
 @Injectable()
 export class CategoryService {
@@ -21,15 +22,11 @@ export class CategoryService {
   ) {}
 
   async findAll(queryDto: QueryCategoryDto) {
-    const cached = await this.redisService.get("categories:all");
-    if (cached) {
-      return cached;
-    }
-
-    const data = await this.categoryRepository.findAllPaginated(queryDto);
-    await this.redisService.set("categories:all", data, 3600);
-
-    return data;
+    return await this.redisService.getOrSet(
+      "categories:all",
+      () => this.categoryRepository.findAllPaginated(queryDto),
+      CACHE_TTL.CATEGORIES,
+    );
   }
 
   async findOne(id: string) {

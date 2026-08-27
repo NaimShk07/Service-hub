@@ -11,6 +11,7 @@ import { CategoryRepository } from "../repositories/category.repository";
 import { CreateServiceDto } from "../dto/service/create-service.dto";
 import { generateSlug } from "@common/utils/slug.util";
 import { RedisService } from "@common/cache/redis.service";
+import { CACHE_TTL } from "@common/constants/cache-ttl.constant";
 
 @Injectable()
 export class ServiceService {
@@ -59,15 +60,11 @@ export class ServiceService {
   }
 
   async findAll(queryDto: QueryServiceDto) {
-    const cached = await this.redisService.get("services:all");
-    if (cached) {
-      return cached;
-    }
-
-    const data = await this.serviceRepository.findAllPaginated(queryDto);
-    await this.redisService.set("services:all", data, 3600);
-
-    return data;
+    return await this.redisService.getOrSet(
+      "services:all",
+      () => this.serviceRepository.findAllPaginated(queryDto),
+      CACHE_TTL.SERVICES,
+    );
   }
 
   async findOne(id: string) {

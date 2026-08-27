@@ -53,7 +53,8 @@ export class AdminProviderService {
 
     this.logger.log(`Successfully verified provider profile: ${id}`);
     await this.redisService.del(`provider:profile:${id}`);
-    await this.redisService.delByPattern("providers:search:*");
+    await this.redisService.incrementSearchVersion();
+
     return result;
   }
 

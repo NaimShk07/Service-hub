@@ -28,6 +28,6 @@ import { ProviderAvailabilityRepository } from "./repositories/provider-availabi
     ProviderAvailabilityService,
     ProviderAvailabilityRepository,
   ],
-  exports: [ProviderRepository, ProviderService],
+  exports: [ProviderRepository, ProviderService, ProviderServiceRepository],
 })
 export class ProviderModule {}

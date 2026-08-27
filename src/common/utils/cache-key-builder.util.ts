@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 
 export function buildNormalizedQueryKey(
   prefix: string,
+  version: number,
   query: Record<string, any>,
 ): string {
   const cleanedQuery: Record<string, string> = {};
@@ -36,5 +37,5 @@ export function buildNormalizedQueryKey(
     .digest("hex")
     .substring(0, 16);
 
-  return `${prefix}:${hash}`;
+  return `${prefix}:v${version}:${hash}`;
 }

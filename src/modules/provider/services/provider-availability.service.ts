@@ -59,7 +59,8 @@ export class ProviderAvailabilityService {
     this.logger.log(
       `Successfully updated availability schedule for provider: ${providerId}`,
     );
-    await this.redisService.delByPattern("providers:search:*");
+    await this.redisService.incrementSearchVersion();
+
     return result;
   }
 

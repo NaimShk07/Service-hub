@@ -116,4 +116,39 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       );
     }
   }
+
+  async getOrSet<T>(
+    key: string,
+    fetchFn: () => Promise<T>,
+    ttlSeconds: number,
+  ) {
+    const cached = await this.get<T>(key);
+
+    if (cached) {
+      return cached;
+    }
+
+    const freshData = await fetchFn();
+
+    if (freshData !== null && freshData !== undefined) {
+      await this.set(key, freshData, ttlSeconds);
+    }
+
+    return freshData;
+  }
+
+  async getSearchVersion(): Promise<number> {
+    const version = await this.get<number>("providers:version");
+    return version ? Number(version) : 1;
+  }
+
+  async incrementSearchVersion(): Promise<void> {
+    if (!this.isReady()) return;
+
+    try {
+      await this.client.incr("providers:version");
+    } catch (error) {
+      this.logger.error("Failed to increment providers:version", error);
+    }
+  }
 }
