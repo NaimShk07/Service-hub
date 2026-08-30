@@ -9,8 +9,12 @@ export class BookingRepository extends BaseRepository {
     super();
   }
 
-  async create(data: Prisma.BookingUncheckedCreateInput) {
-    return this.prisma.booking.create({
+  async create(
+    data: Prisma.BookingUncheckedCreateInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx || this.prisma;
+    return client.booking.create({
       data,
     });
   }

@@ -21,7 +21,9 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
       case "P2002": {
         const target = exception.meta?.target as string[] | undefined;
         status = HttpStatus.CONFLICT;
-        message = `Unique constraint violation on field: ${target?.join(", ")}`;
+        message = target
+          ? `Unique constraint violation on field: ${target.join(", ")}`
+          : "Slot or unique record conflict occurred";
         break;
       }
       case "P2025": {

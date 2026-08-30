@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -9,12 +10,15 @@ import { BookingRepository } from "../repositories/booking.repository";
 import { ProviderServiceRepository } from "@modules/provider/repositories/provider-service.repository";
 import { CreateBookingDto } from "../dto/create-booking.dto";
 import {
+  AuditAction,
   BookingStatus,
   UserStatus,
   VerificationStatus,
 } from "@prisma-client/enums";
 import { canTransitionBooking } from "../domain/booking-state-machine";
 import { ProviderAvailabilityRepository } from "@modules/provider/repositories/provider-availability.repositor";
+import { Prisma } from "@prisma-client/client";
+import { PrismaService } from "@database/prisma/prisma.service";
 
 @Injectable()
 export class BookingService {
@@ -24,6 +28,7 @@ export class BookingService {
     private readonly bookingRepository: BookingRepository,
     private readonly providerServiceRepository: ProviderServiceRepository,
     private readonly providerAvailabilityRepository: ProviderAvailabilityRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
   async createBooking(customerId: string, dto: CreateBookingDto) {
@@ -117,33 +122,76 @@ export class BookingService {
       );
     }
 
-    // 3. Compute endsAt time from server-defined durationMinutes
+    // 4. Compute endsAt time from server-defined durationMinutes
     const durationMs = providerService.durationMinutes * 60 * 1000;
     const endsAtDate = new Date(startsAtDate.getTime() + durationMs);
 
-    // 4. Extract date portion for bookingDate
+    // 5. Extract date portion for bookingDate
     const bookingDate = new Date(startsAtDate);
     bookingDate.setUTCHours(0, 0, 0, 0);
 
-    // 5. Construct derived booking record
-    const booking = await this.bookingRepository.create({
-      customerId,
-      providerId: providerService.providerId,
-      providerServiceId: providerService.id,
-      bookingDate,
-      startTime: startsAtDate,
-      endTime: endsAtDate,
-      bookingStatus: BookingStatus.PENDING_PAYMENT,
-      bookedPrice: providerService.price,
-      bookedDuration: providerService.durationMinutes,
-      bookedServiceMode: providerService.service.serviceMode,
-      serviceName: providerService.service.name,
-      providerBusinessName: providerService.provider.businessName,
-      customerNotes: dto.notes,
-    });
+    // 6. Execute atomic booking creation and audit logging within an interactive transaction
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const booking = await this.bookingRepository.create(
+          {
+            customerId,
+            providerId: providerService.providerId,
+            providerServiceId: providerService.id,
+            bookingDate,
+            startTime: startsAtDate,
+            endTime: endsAtDate,
+            bookingStatus: BookingStatus.PENDING_PAYMENT,
+            bookedPrice: providerService.price,
+            bookedDuration: providerService.durationMinutes,
+            bookedServiceMode: providerService.service.serviceMode,
+            serviceName: providerService.service.name,
+            providerBusinessName: providerService.provider.businessName,
+            customerNotes: dto.notes,
+          },
+          tx,
+        );
 
-    this.logger.log(`Successfully created booking "${booking.id}"`);
-    return booking;
+        await tx.auditLog.create({
+          data: {
+            actorUserId: customerId,
+            entityType: "Booking",
+            entityId: booking.id,
+            action: AuditAction.BOOKING_CREATED,
+            newValue: {
+              bookingStatus: booking.bookingStatus,
+              startsAt: startsAtDate.toISOString(),
+              endsAt: endsAtDate.toISOString(),
+              price: Number(booking.bookedPrice),
+            },
+          },
+        });
+
+        this.logger.log(
+          `Successfully created booking "${booking.id}" with audit log`,
+        );
+        return booking;
+      });
+    } catch (error: any) {
+      // Catch PostgreSQL exclusion violation / Prisma unique or conflict error
+      if (
+        error?.code === "P2002" ||
+        error?.code === "P2010" ||
+        error?.code === "23P01" ||
+        error?.message?.includes("no_provider_booking_overlap") ||
+        error?.message?.includes("exclusion") ||
+        error?.message?.includes("conflicting key value violates exclusion constraint") ||
+        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+      ) {
+        this.logger.warn(
+          `Booking conflict: provider ${providerService.providerId} is already booked for this time window`,
+        );
+        throw new ConflictException(
+          "The selected time slot is no longer available. Please select another slot.",
+        );
+      }
+      throw error;
+    }
   }
 
   async getBookingById(bookingId: string, userId: string) {
