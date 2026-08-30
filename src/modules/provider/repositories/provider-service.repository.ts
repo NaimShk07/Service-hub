@@ -23,7 +23,7 @@ export class ProviderServiceRepository extends BaseRepository {
     return await this.prisma.providerService.findUnique({
       where: { id },
       include: {
-        provider: true,
+        provider: { include: { user: true } },
         service: { include: { category: true } },
       },
     });
