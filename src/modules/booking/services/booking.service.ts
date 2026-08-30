@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { BookingRepository } from "../repositories/booking.repository";
 import { ProviderServiceRepository } from "@modules/provider/repositories/provider-service.repository";
+import { ProviderAvailabilityRepository } from "@modules/provider/repositories/provider-availability.repositor";
 import { CreateBookingDto } from "../dto/create-booking.dto";
 import {
   AuditAction,
@@ -16,9 +17,10 @@ import {
   VerificationStatus,
 } from "@prisma-client/enums";
 import { canTransitionBooking } from "../domain/booking-state-machine";
-import { ProviderAvailabilityRepository } from "@modules/provider/repositories/provider-availability.repositor";
-import { Prisma } from "@prisma-client/client";
 import { PrismaService } from "@database/prisma/prisma.service";
+import { Prisma } from "@prisma-client/client";
+import { QueryBookingsDto } from "../dto/query-booking.dto";
+import { CancelBookingDto } from "../dto/cancel-booking.dto";
 
 @Injectable()
 export class BookingService {
@@ -32,17 +34,14 @@ export class BookingService {
   ) {}
 
   async createBooking(customerId: string, dto: CreateBookingDto) {
-    this.logger.log(`Creating booking request for customer: ${customerId}`);
+    this.logger.log(`Initiating booking creation for customer: ${customerId}`);
 
-    // 1. Fetch ProviderService offering with relations
+    // 1. Fetch Provider Service Offering
     const providerService = await this.providerServiceRepository.findById(
       dto.providerServiceId,
     );
 
     if (!providerService || !providerService.isActive) {
-      this.logger.warn(
-        `Provider service offering "${dto.providerServiceId}" not found or inactive`,
-      );
       throw new NotFoundException(
         "Provider service offering not found or inactive",
       );
@@ -62,7 +61,7 @@ export class BookingService {
       );
     }
 
-    // 2. Validate booking start date & 30-day advance window
+    // 2. Validate Booking Date & Advance Booking Window (Max 30 days)
     const startsAtDate = new Date(dto.startsAt);
     if (isNaN(startsAtDate.getTime())) {
       throw new BadRequestException("Invalid date format for startsAt");
@@ -74,16 +73,14 @@ export class BookingService {
 
     const maxAdvanceDate = new Date();
     maxAdvanceDate.setDate(maxAdvanceDate.getDate() + 30);
-
     if (startsAtDate > maxAdvanceDate) {
       throw new BadRequestException(
         "Bookings can only be scheduled up to 30 days in advance",
       );
     }
 
-    // 3. Validate Provider Working Hours & Buffer Occupation
+    // 3. Validate Provider Working Shift & Buffer Time
     const requestedWeekday = startsAtDate.getUTCDay();
-
     const schedules =
       await this.providerAvailabilityRepository.findByProviderId(
         providerService.providerId,
@@ -106,33 +103,32 @@ export class BookingService {
       providerService.durationMinutes +
       (providerService.bufferMinutes || 0);
 
-    const fitsOccupiedInShift = daySchedules.some((shift) => {
+    const fitsInShift = daySchedules.some((shift) => {
       const [startH, startM] = shift.startTime.split(":").map(Number);
       const [endH, endM] = shift.endTime.split(":").map(Number);
-
       const shiftStart = startH * 60 + startM;
       const shiftEnd = endH * 60 + endM;
 
       return startMinutes >= shiftStart && occupiedEndMinutes <= shiftEnd;
     });
 
-    if (!fitsOccupiedInShift) {
+    if (!fitsInShift) {
       throw new BadRequestException(
         "Requested booking slot (including post-service buffer) exceeds provider working shift hours",
       );
     }
 
-    // 4. Compute endsAt time from server-defined durationMinutes
+    // 4. Calculate Server-Side End Time & Date
     const durationMs = providerService.durationMinutes * 60 * 1000;
     const endsAtDate = new Date(startsAtDate.getTime() + durationMs);
 
-    // 5. Extract date portion for bookingDate
     const bookingDate = new Date(startsAtDate);
     bookingDate.setUTCHours(0, 0, 0, 0);
 
-    // 6. Execute atomic booking creation and audit logging within an interactive transaction
+    // 5. Execute Atomic Creation within Prisma Interactive Transaction
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // A. Insert Booking record in PENDING_PAYMENT status
         const booking = await this.bookingRepository.create(
           {
             customerId,
@@ -152,6 +148,7 @@ export class BookingService {
           tx,
         );
 
+        // B. Audit Log entry for creation
         await tx.auditLog.create({
           data: {
             actorUserId: customerId,
@@ -168,23 +165,30 @@ export class BookingService {
         });
 
         this.logger.log(
-          `Successfully created booking "${booking.id}" with audit log`,
+          `Created booking "${booking.id}" with status PENDING_PAYMENT`,
         );
         return booking;
       });
     } catch (error: any) {
-      // Catch PostgreSQL exclusion violation / Prisma unique or conflict error
+      // 6. Translate Database GiST Exclusion / Unique Violation / Write Conflicts to Domain HTTP 409
       if (
         error?.code === "P2002" ||
         error?.code === "P2010" ||
+        error?.code === "P2034" ||
         error?.code === "23P01" ||
+        error?.code === "40001" ||
         error?.message?.includes("no_provider_booking_overlap") ||
         error?.message?.includes("exclusion") ||
-        error?.message?.includes("conflicting key value violates exclusion constraint") ||
-        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+        error?.message?.includes("conflict") ||
+        error?.message?.includes("write conflict") ||
+        error?.message?.includes(
+          "conflicting key value violates exclusion constraint",
+        ) ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === "P2002" || error.code === "P2034"))
       ) {
         this.logger.warn(
-          `Booking conflict: provider ${providerService.providerId} is already booked for this time window`,
+          `Booking conflict: provider ${providerService.providerId} is already booked for this interval`,
         );
         throw new ConflictException(
           "The selected time slot is no longer available. Please select another slot.",
@@ -192,6 +196,11 @@ export class BookingService {
       }
       throw error;
     }
+  }
+
+  async getCustomerBookings(customerId: string, queryDto: QueryBookingsDto) {
+    this.logger.log(`Fetching bookings for customer: ${customerId}`);
+    return this.bookingRepository.findCustomerBooking(customerId, queryDto);
   }
 
   async getBookingById(bookingId: string, userId: string) {
@@ -209,27 +218,75 @@ export class BookingService {
     return booking;
   }
 
-  async updateBookingStatus(
+  async cancelBookingAsCustomer(
     bookingId: string,
-    targetStatus: BookingStatus,
-    reason?: string,
+    customerId: string,
+    dto: CancelBookingDto,
   ) {
+    this.logger.log(
+      `Customer ${customerId} requested cancellation for booking ${bookingId}`,
+    );
+
     const booking = await this.bookingRepository.findById(bookingId);
 
-    if (!booking) {
+    if (!booking || booking.customerId !== customerId) {
       throw new NotFoundException(`Booking with ID "${bookingId}" not found`);
     }
 
-    if (!canTransitionBooking(booking.bookingStatus, targetStatus)) {
+    // 1. Verify Allowed State Transitions (PENDING_PAYMENT, CONFIRMED -> CANCELLED)
+    if (!canTransitionBooking(booking.bookingStatus, BookingStatus.CANCELLED)) {
       throw new BadRequestException(
-        `Cannot transition booking from state "${booking.bookingStatus}" to "${targetStatus}"`,
+        `Cannot cancel booking in "${booking.bookingStatus}" status`,
       );
     }
 
-    return await this.bookingRepository.updateStatus(
-      bookingId,
-      targetStatus,
-      reason,
+    // 2. Enforce 2-Hour Cancellation Policy
+    // Reconstruct start timestamp from bookingDate (Date) + startTime (Time)
+    const appointmentStart = new Date(booking.bookingDate);
+    appointmentStart.setUTCHours(
+      booking.startTime.getUTCHours(),
+      booking.startTime.getUTCMinutes(),
+      booking.startTime.getUTCSeconds(),
+      0,
     );
+
+    const now = new Date();
+    const cancellationDeadlineMs =
+      appointmentStart.getTime() - 2 * 60 * 60 * 1000;
+
+    if (now.getTime() >= cancellationDeadlineMs) {
+      throw new ConflictException(
+        "Bookings cannot be cancelled within 2 hours of the scheduled appointment time.",
+      );
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      const updatedBooking = await this.bookingRepository.updateStatus(
+        bookingId,
+        BookingStatus.CANCELLED,
+        dto.reason || "Cancelled by customer",
+        tx,
+      );
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: customerId,
+          entityType: "Booking",
+          entityId: bookingId,
+          action: AuditAction.BOOKING_CANCELLED,
+          oldValue: { status: booking.bookingStatus },
+          newValue: {
+            status: BookingStatus.CANCELLED,
+            cancellationReason: dto.reason || "Cancelled by customer",
+            cancelledAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      this.logger.log(
+        `Booking ${bookingId} cancelled by customer ${customerId}`,
+      );
+      return updatedBooking;
+    });
   }
 }

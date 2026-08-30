@@ -86,8 +86,13 @@ describe("Provider Search & Marketplace (e2e)", () => {
     expect(res.body.success).toBe(true);
     const items = res.body.data.items;
     for (let i = 0; i < items.length - 1; i++) {
-      if (items[i].startingPrice !== null && items[i + 1].startingPrice !== null) {
-        expect(items[i].startingPrice).toBeLessThanOrEqual(items[i + 1].startingPrice);
+      if (
+        items[i].startingPrice !== null &&
+        items[i + 1].startingPrice !== null
+      ) {
+        expect(items[i].startingPrice).toBeLessThanOrEqual(
+          items[i + 1].startingPrice,
+        );
       }
     }
   });

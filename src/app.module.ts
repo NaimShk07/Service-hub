@@ -47,7 +47,7 @@ import { BookingModule } from "@modules/booking/booking.module";
     StorageModule,
     AdminModule,
     CacheModule,
-    BookingModule
+    BookingModule,
   ],
   controllers: [AppController],
   providers: [
