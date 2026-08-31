@@ -175,6 +175,7 @@ export class BookingService {
         error?.code === "P2002" ||
         error?.code === "P2010" ||
         error?.code === "P2034" ||
+        error?.code === "P2039" ||
         error?.code === "23P01" ||
         error?.code === "40001" ||
         error?.message?.includes("no_provider_booking_overlap") ||
@@ -185,7 +186,9 @@ export class BookingService {
           "conflicting key value violates exclusion constraint",
         ) ||
         (error instanceof Prisma.PrismaClientKnownRequestError &&
-          (error.code === "P2002" || error.code === "P2034"))
+          (error.code === "P2002" ||
+            error.code === "P2034" ||
+            error.code === "P2039"))
       ) {
         this.logger.warn(
           `Booking conflict: provider ${providerService.providerId} is already booked for this interval`,

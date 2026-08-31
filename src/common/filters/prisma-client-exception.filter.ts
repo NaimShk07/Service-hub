@@ -18,12 +18,18 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
     let message: string;
 
     switch (exception.code) {
+      case "P2034":
+      case "P2039":
       case "P2002": {
         const target = exception.meta?.target as string[] | undefined;
         status = HttpStatus.CONFLICT;
-        message = target
-          ? `Unique constraint violation on field: ${target.join(", ")}`
-          : "Slot or unique record conflict occurred";
+        message =
+          exception.message?.includes("no_provider_booking_overlap") ||
+          exception.message?.includes("exclusion")
+            ? "This time slot is no longer available."
+            : target
+              ? `Unique constraint violation on field: ${target.join(", ")}`
+              : "Conflict occurred";
         break;
       }
       case "P2025": {

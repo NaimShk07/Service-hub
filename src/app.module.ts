@@ -16,6 +16,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { CacheModule } from "@common/cache/cache.module";
 import { BookingModule } from "@modules/booking/booking.module";
+import { PaymentModule } from "@modules/payment/payment.module";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BookingModule } from "@modules/booking/booking.module";
     AdminModule,
     CacheModule,
     BookingModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [
