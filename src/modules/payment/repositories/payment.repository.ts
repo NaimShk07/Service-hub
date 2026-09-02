@@ -58,7 +58,7 @@ export class PaymentRepository extends BaseRepository {
     });
   }
 
-  async udpateStatus(
+  async updateStatus(
     id: string,
     status: PaymentStatus,
     details?: {

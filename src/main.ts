@@ -11,7 +11,7 @@ import helmet from "helmet";
 import { PrismaClientExceptionFilter } from "@common/filters/prisma-client-exception.filter";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
 
   // Helmet

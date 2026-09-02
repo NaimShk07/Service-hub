@@ -13,6 +13,7 @@ export class RazorpayGateway implements IPaymentGateway {
   private readonly logger = new Logger(RazorpayGateway.name);
   private readonly keyId: string;
   private readonly keySecret: string;
+  private readonly webhookSecret: string;
 
   constructor(private readonly configService: ConfigService) {
     this.keyId =
@@ -20,6 +21,9 @@ export class RazorpayGateway implements IPaymentGateway {
     this.keySecret =
       this.configService.get<string>("RAZORPAY_KEY_SECRET") ||
       "rzp_test_mock_secret";
+    this.webhookSecret =
+      this.configService.get<string>("RAZORPAY_WEBHOOK_SECRET") ||
+      "rzp_test_webhook_secret";
   }
 
   async createOrder(
@@ -75,12 +79,17 @@ export class RazorpayGateway implements IPaymentGateway {
   verifyWebhookSignature(
     rawBody: string | Buffer,
     signature: string,
-    secret: string,
+    secret?: string,
   ): boolean {
+    const webhookSecret = secret || this.webhookSecret;
     const expectedSignature = crypto
-      .createHmac("sha256", secret || this.keySecret)
+      .createHmac("sha256", webhookSecret)
       .update(rawBody)
       .digest("hex");
+
+    if (Buffer.byteLength(expectedSignature) !== Buffer.byteLength(signature)) {
+      return false;
+    }
 
     return crypto.timingSafeEqual(
       Buffer.from(expectedSignature, "utf8"),

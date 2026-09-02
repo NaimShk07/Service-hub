@@ -36,6 +36,6 @@ export interface IPaymentGateway {
   verifyWebhookSignature(
     rawBody: string | Buffer,
     signature: string,
-    secret: string,
+    secret?: string,
   ): boolean;
 }

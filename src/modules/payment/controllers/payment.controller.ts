@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -18,22 +21,21 @@ import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { CreatePaymentOrderDto } from "../dto/create-payment-order.dto";
 import { VerifyPaymentDto } from "../dto/verify-payment.dto";
+import { Request } from "express";
 
 @ApiTags("Payments")
 @Controller("payments")
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   @Post("orders")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: "Create a Razorpay payment order for a booking" })
   @ApiResponse({
     status: 201,
     description: "Payment order created successfully",
   })
-  @ApiResponse({ status: 400, description: "Invalid booking status" })
-  @ApiResponse({ status: 404, description: "Booking not found" })
   async createPaymentOrder(
     @CurrentUser("userId") customerId: string,
     @Body() dto: CreatePaymentOrderDto,
@@ -42,16 +44,13 @@ export class PaymentController {
   }
 
   @Post("verify")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: "Verify client-side Razorpay payment signature" })
   @ApiResponse({
     status: 200,
     description: "Payment verified and booking confirmed",
   })
-  @ApiResponse({
-    status: 400,
-    description: "Invalid signature or state transition",
-  })
-  @ApiResponse({ status: 404, description: "Payment order not found" })
   async verifyPayment(
     @CurrentUser("userId") customerId: string,
     @Body() dto: VerifyPaymentDto,
@@ -59,10 +58,33 @@ export class PaymentController {
     return await this.paymentService.verifyClientPayment(customerId, dto);
   }
 
+  @Post("webhook")
+  @ApiOperation({
+    summary: "Public webhook endpoint for Razorpay server events (No JWT)",
+  })
+  @ApiResponse({ status: 200, description: "Webhook event processed" })
+  @ApiResponse({ status: 400, description: "Invalid webhook signature" })
+  async handleRazorpayWebhook(
+    @Req() req: Request,
+    @Headers("x-razorpay-signature") signature: string,
+  ) {
+    // req.rawBody is populated by NestFactory.create(AppModule, { rawBody: true })
+    const rawBody = (req as any).rawBody;
+
+    if (!rawBody) {
+      throw new BadRequestException(
+        "Raw body buffer not found. Ensure rawBody: true is enabled.",
+      );
+    }
+
+    return await this.paymentService.handleWebhookEvent(rawBody, signature);
+  }
+
   @Get(":id")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: "Get payment details by ID" })
   @ApiResponse({ status: 200, description: "Payment details" })
-  @ApiResponse({ status: 404, description: "Payment not found" })
   async getPaymentById(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser("userId") userId: string,
