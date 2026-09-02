@@ -17,6 +17,7 @@ import { PaymentService } from "../services/payment.service";
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { CreatePaymentOrderDto } from "../dto/create-payment-order.dto";
+import { VerifyPaymentDto } from "../dto/verify-payment.dto";
 
 @ApiTags("Payments")
 @Controller("payments")
@@ -38,6 +39,24 @@ export class PaymentController {
     @Body() dto: CreatePaymentOrderDto,
   ) {
     return await this.paymentService.createPaymentOrder(customerId, dto);
+  }
+
+  @Post("verify")
+  @ApiOperation({ summary: "Verify client-side Razorpay payment signature" })
+  @ApiResponse({
+    status: 200,
+    description: "Payment verified and booking confirmed",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid signature or state transition",
+  })
+  @ApiResponse({ status: 404, description: "Payment order not found" })
+  async verifyPayment(
+    @CurrentUser("userId") customerId: string,
+    @Body() dto: VerifyPaymentDto,
+  ) {
+    return await this.paymentService.verifyClientPayment(customerId, dto);
   }
 
   @Get(":id")

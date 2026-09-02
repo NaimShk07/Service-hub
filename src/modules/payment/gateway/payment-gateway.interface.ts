@@ -21,6 +21,16 @@ export interface IPaymentGateway {
   createOrder(params: CreateGatewayOrderParams): Promise<GatewayOrderResult>;
 
   /**
+   * Verifies the client checkout signature: HMAC_SHA256(order_id + "|" + payment_id, secret)
+   */
+  verifyPaymentSignature(
+    orderId: string,
+    paymentId: string,
+    signature: string,
+    secret?: string,
+  ): boolean;
+
+  /**
    * Verifies the cryptographic HMAC SHA-256 signature of an incoming webhook
    */
   verifyWebhookSignature(

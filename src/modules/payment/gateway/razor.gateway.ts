@@ -6,6 +6,7 @@ import {
 } from "./payment-gateway.interface";
 import { ConfigService } from "@nestjs/config";
 import crypto from "crypto";
+import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 
 @Injectable()
 export class RazorpayGateway implements IPaymentGateway {
@@ -28,8 +29,11 @@ export class RazorpayGateway implements IPaymentGateway {
       `Creating Razorpay Order for booking: ${params.bookingId}, amount: ${params.amount} ${params.currency}`,
     );
 
-    // Convert amount to smallest currency unit (INR Rupees -> Paise: * 100)
-    const amountInPaise = Math.round(params.amount * 100);
+    // Centralized conversion: ₹899.99 -> 89999 paise
+    const amountInPaise = toSmallestCurrencyUnit(
+      params.amount,
+      params.currency,
+    );
 
     // Mock / Stub order generation (can be swapped with official SDK: new Razorpay().orders.create)
     const mockGatewayOrderId = `order_${crypto.randomBytes(8).toString("hex")}`;
@@ -45,6 +49,29 @@ export class RazorpayGateway implements IPaymentGateway {
       },
     };
   }
+
+  verifyPaymentSignature(
+    orderId: string,
+    paymentId: string,
+    signature: string,
+    secret?: string,
+  ): boolean {
+    const text = `${orderId}|${paymentId}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", secret || this.keySecret)
+      .update(text)
+      .digest("hex");
+
+    if (Buffer.byteLength(expectedSignature) !== Buffer.byteLength(signature)) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature, "utf8"),
+      Buffer.from(signature, "utf8"),
+    );
+  }
+
   verifyWebhookSignature(
     rawBody: string | Buffer,
     signature: string,

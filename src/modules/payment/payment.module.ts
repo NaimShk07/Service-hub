@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { PaymentService } from "./services/payment.service";
 import { PaymentRepository } from "./repositories/payment.repository";
 import { BookingModule } from "@modules/booking/booking.module";
@@ -7,7 +7,7 @@ import { PAYMENT_GATEWAY } from "./gateway/payment-gateway.token";
 import { RazorpayGateway } from "./gateway/razor.gateway";
 
 @Module({
-  imports: [BookingModule],
+  imports: [forwardRef(() => BookingModule)],
   controllers: [PaymentController],
   providers: [
     PaymentService,

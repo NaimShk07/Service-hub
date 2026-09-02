@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,17 +11,22 @@ import { BookingRepository } from "../repositories/booking.repository";
 import { ProviderServiceRepository } from "@modules/provider/repositories/provider-service.repository";
 import { ProviderAvailabilityRepository } from "@modules/provider/repositories/provider-availability.repositor";
 import { CreateBookingDto } from "../dto/create-booking.dto";
+import { QueryBookingsDto } from "../dto/query-booking.dto";
+import { CancelBookingDto } from "../dto/cancel-booking.dto";
 import {
   AuditAction,
   BookingStatus,
+  PaymentGateway,
+  PaymentStatus,
   UserStatus,
   VerificationStatus,
 } from "@prisma-client/enums";
 import { canTransitionBooking } from "../domain/booking-state-machine";
 import { PrismaService } from "@database/prisma/prisma.service";
 import { Prisma } from "@prisma-client/client";
-import { QueryBookingsDto } from "../dto/query-booking.dto";
-import { CancelBookingDto } from "../dto/cancel-booking.dto";
+import { PAYMENT_GATEWAY } from "@modules/payment/gateway/payment-gateway.token";
+import { IPaymentGateway } from "@modules/payment/gateway/payment-gateway.interface";
+import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 
 @Injectable()
 export class BookingService {
@@ -30,6 +36,7 @@ export class BookingService {
     private readonly bookingRepository: BookingRepository,
     private readonly providerServiceRepository: ProviderServiceRepository,
     private readonly providerAvailabilityRepository: ProviderAvailabilityRepository,
+    @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -40,13 +47,11 @@ export class BookingService {
     const providerService = await this.providerServiceRepository.findById(
       dto.providerServiceId,
     );
-
     if (!providerService || !providerService.isActive) {
       throw new NotFoundException(
         "Provider service offering not found or inactive",
       );
     }
-
     const provider = providerService.provider;
     if (
       !provider ||
@@ -54,23 +59,20 @@ export class BookingService {
     ) {
       throw new BadRequestException("Provider profile is not verified");
     }
-
     if (provider.user?.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException(
         "Provider account is currently suspended or inactive",
       );
     }
 
-    // 2. Validate Booking Date & Advance Booking Window (Max 30 days)
+    // 2. Validate Booking Date & 30-day window
     const startsAtDate = new Date(dto.startsAt);
     if (isNaN(startsAtDate.getTime())) {
       throw new BadRequestException("Invalid date format for startsAt");
     }
-
     if (startsAtDate < new Date()) {
       throw new BadRequestException("Booking start time cannot be in the past");
     }
-
     const maxAdvanceDate = new Date();
     maxAdvanceDate.setDate(maxAdvanceDate.getDate() + 30);
     if (startsAtDate > maxAdvanceDate) {
@@ -79,39 +81,33 @@ export class BookingService {
       );
     }
 
-    // 3. Validate Provider Working Shift & Buffer Time
+    // 3. Validate Provider Working Hours & Shift
     const requestedWeekday = startsAtDate.getUTCDay();
     const schedules =
       await this.providerAvailabilityRepository.findByProviderId(
         providerService.providerId,
       );
-
     const daySchedules = schedules.filter(
       (s) => s.weekday === requestedWeekday && s.isAvailable === true,
     );
-
     if (daySchedules.length === 0) {
       throw new BadRequestException(
         "Provider is not available on this day of the week",
       );
     }
-
     const startMinutes =
       startsAtDate.getUTCHours() * 60 + startsAtDate.getUTCMinutes();
     const occupiedEndMinutes =
       startMinutes +
       providerService.durationMinutes +
       (providerService.bufferMinutes || 0);
-
     const fitsInShift = daySchedules.some((shift) => {
       const [startH, startM] = shift.startTime.split(":").map(Number);
       const [endH, endM] = shift.endTime.split(":").map(Number);
       const shiftStart = startH * 60 + startM;
       const shiftEnd = endH * 60 + endM;
-
       return startMinutes >= shiftStart && occupiedEndMinutes <= shiftEnd;
     });
-
     if (!fitsInShift) {
       throw new BadRequestException(
         "Requested booking slot (including post-service buffer) exceeds provider working shift hours",
@@ -121,14 +117,21 @@ export class BookingService {
     // 4. Calculate Server-Side End Time & Date
     const durationMs = providerService.durationMinutes * 60 * 1000;
     const endsAtDate = new Date(startsAtDate.getTime() + durationMs);
-
     const bookingDate = new Date(startsAtDate);
     bookingDate.setUTCHours(0, 0, 0, 0);
 
-    // 5. Execute Atomic Creation within Prisma Interactive Transaction
+    // 5. Generate Upstream Payment Order via Gateway
+    const gatewayOrder = await this.paymentGateway.createOrder({
+      bookingId: "temp",
+      amount: Number(providerService.price),
+      currency: providerService.currency || "INR",
+      receipt: `rcpt_${Date.now()}`,
+    });
+
+    // 6. Execute Atomic Transaction: Booking + Payment + AuditLog
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // A. Insert Booking record in PENDING_PAYMENT status
+        // A. Insert Booking record
         const booking = await this.bookingRepository.create(
           {
             customerId,
@@ -147,8 +150,18 @@ export class BookingService {
           },
           tx,
         );
-
-        // B. Audit Log entry for creation
+        // B. Insert Initial Payment record
+        const payment = await tx.payment.create({
+          data: {
+            bookingId: booking.id,
+            gateway: PaymentGateway.RAZORPAY,
+            gatewayOrderId: gatewayOrder.gatewayOrderId,
+            amount: providerService.price,
+            currency: providerService.currency || "INR",
+            status: PaymentStatus.CREATED,
+          },
+        });
+        // C. Insert Audit Log
         await tx.auditLog.create({
           data: {
             actorUserId: customerId,
@@ -160,17 +173,27 @@ export class BookingService {
               startsAt: startsAtDate.toISOString(),
               endsAt: endsAtDate.toISOString(),
               price: Number(booking.bookedPrice),
+              gatewayOrderId: gatewayOrder.gatewayOrderId,
             },
           },
         });
-
         this.logger.log(
-          `Created booking "${booking.id}" with status PENDING_PAYMENT`,
+          `Successfully created booking "${booking.id}" with payment order "${gatewayOrder.gatewayOrderId}"`,
         );
-        return booking;
+        // Return combined payload with Razorpay checkout details
+        return {
+          ...booking,
+          payment: {
+            id: payment.id,
+            gateway: payment.gateway,
+            orderId: payment.gatewayOrderId,
+            amount: toSmallestCurrencyUnit(payment.amount, payment.currency), // in paise (e.g. 89999)
+            currency: payment.currency,
+            status: payment.status,
+          },
+        };
       });
     } catch (error: any) {
-      // 6. Translate Database GiST Exclusion / Unique Violation / Write Conflicts to Domain HTTP 409
       if (
         error?.code === "P2002" ||
         error?.code === "P2010" ||
