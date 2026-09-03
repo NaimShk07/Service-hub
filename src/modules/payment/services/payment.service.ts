@@ -141,7 +141,16 @@ export class PaymentService {
       };
     }
 
-    // 4. Validate State Transitions
+    // 4. Validate Booking State before Client Confirmation
+    if (payment.booking.bookingStatus !== BookingStatus.PENDING_PAYMENT) {
+      this.logger.warn(
+        `Client attempted to verify payment for booking "${payment.bookingId}" in status "${payment.booking.bookingStatus}"`,
+      );
+      throw new BadRequestException(
+        `Cannot confirm booking in "${payment.booking.bookingStatus}" status. The reservation may have expired.`,
+      );
+    }
+
     if (!canTransitionPayment(payment.status, PaymentStatus.SUCCESS)) {
       throw new BadRequestException(
         `Cannot transition payment from "${payment.status}" to "${PaymentStatus.SUCCESS}"`,
@@ -337,23 +346,19 @@ export class PaymentService {
         switch (eventName) {
           case "payment.captured":
           case "order.paid": {
-            if (
-              payment.status === PaymentStatus.SUCCESS &&
-              payment.booking.bookingStatus === BookingStatus.CONFIRMED
-            ) {
+            if (payment.status === PaymentStatus.SUCCESS) {
               this.logger.log(
                 `Payment "${payment.id}" already in SUCCESS status.`,
               );
               break;
             }
-
             if (!canTransitionPayment(payment.status, PaymentStatus.SUCCESS)) {
               this.logger.warn(
                 `Cannot transition payment ${payment.id} from ${payment.status} to SUCCESS`,
               );
               break;
             }
-
+            // Update Payment record to SUCCESS (Financial truth)
             await this.paymentRepository.updateStatus(
               payment.id,
               PaymentStatus.SUCCESS,
@@ -363,14 +368,6 @@ export class PaymentService {
               },
               tx,
             );
-
-            await this.bookingRepository.updateStatus(
-              payment.bookingId,
-              BookingStatus.CONFIRMED,
-              undefined,
-              tx,
-            );
-
             await tx.auditLog.create({
               data: {
                 actorUserId: payment.booking.customerId,
@@ -381,40 +378,63 @@ export class PaymentService {
                 newValue: { status: PaymentStatus.SUCCESS, event: eventName },
               },
             });
-
-            await tx.auditLog.create({
-              data: {
-                actorUserId: payment.booking.customerId,
-                entityType: "Booking",
-                entityId: payment.bookingId,
-                action: AuditAction.BOOKING_CONFIRMED,
-                oldValue: { status: payment.booking.bookingStatus },
-                newValue: {
-                  status: BookingStatus.CONFIRMED,
-                  source: "webhook",
+            // ⚠️ RACE GUARD: Check if booking is still PENDING_PAYMENT
+            if (
+              payment.booking.bookingStatus === BookingStatus.PENDING_PAYMENT
+            ) {
+              await this.bookingRepository.updateStatus(
+                payment.bookingId,
+                BookingStatus.CONFIRMED,
+                undefined,
+                tx,
+              );
+              await tx.auditLog.create({
+                data: {
+                  actorUserId: payment.booking.customerId,
+                  entityType: "Booking",
+                  entityId: payment.bookingId,
+                  action: AuditAction.BOOKING_CONFIRMED,
+                  oldValue: { status: payment.booking.bookingStatus },
+                  newValue: {
+                    status: BookingStatus.CONFIRMED,
+                    source: "webhook",
+                  },
                 },
-              },
-            });
+              });
+              this.logger.log(
+                `Booking "${payment.bookingId}" CONFIRMED via webhook`,
+              );
+            } else {
+              // 🛡️ Booking was already EXPIRED or CANCELLED! Do NOT resurrect it.
+              this.logger.error(
+                `CRITICAL: Payment ${payment.id} captured for booking ${payment.bookingId}, but booking status is "${payment.booking.bookingStatus}". Flagged for refund.`,
+              );
+              await tx.auditLog.create({
+                data: {
+                  actorUserId: payment.booking.customerId,
+                  entityType: "Booking",
+                  entityId: payment.bookingId,
+                  action: AuditAction.PAYMENT_SUCCESS,
+                  oldValue: { status: payment.booking.bookingStatus },
+                  newValue: {
+                    status: payment.booking.bookingStatus,
+                    flag: "REQUIRES_REFUND",
+                    reason: `Payment succeeded after booking was ${payment.booking.bookingStatus}`,
+                  },
+                },
+              });
+            }
             break;
           }
-
           case "payment.failed": {
             if (payment.status !== PaymentStatus.FAILED) {
+              // Mark Payment as FAILED
               await this.paymentRepository.updateStatus(
                 payment.id,
                 PaymentStatus.FAILED,
                 { gatewayPaymentId },
                 tx,
               );
-
-              await this.bookingRepository.updateStatus(
-                payment.bookingId,
-                BookingStatus.PAYMENT_FAILED,
-                paymentEntity?.error_description ||
-                  "Payment failed via gateway",
-                tx,
-              );
-
               await tx.auditLog.create({
                 data: {
                   actorUserId: payment.booking.customerId,
@@ -427,10 +447,13 @@ export class PaymentService {
                   },
                 },
               });
+              // 💡 Keep Booking in PENDING_PAYMENT so customer can retry payment
+              this.logger.log(
+                `Payment "${payment.id}" failed. Booking "${payment.bookingId}" remains PENDING_PAYMENT for retry until expiration.`,
+              );
             }
             break;
           }
-
           default:
             this.logger.log(`Unhandled webhook event: "${eventName}"`);
             break;
