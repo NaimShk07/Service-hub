@@ -67,6 +67,7 @@ export class PaymentController {
   async handleRazorpayWebhook(
     @Req() req: Request,
     @Headers("x-razorpay-signature") signature: string,
+    @Headers("x-razorpay-event-id") eventId?: string,
   ) {
     // req.rawBody is populated by NestFactory.create(AppModule, { rawBody: true })
     const rawBody = (req as any).rawBody;
@@ -77,7 +78,11 @@ export class PaymentController {
       );
     }
 
-    return await this.paymentService.handleWebhookEvent(rawBody, signature);
+    return await this.paymentService.handleWebhookEvent(
+      rawBody,
+      signature,
+      eventId,
+    );
   }
 
   @Get(":id")

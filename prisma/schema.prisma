@@ -316,6 +316,21 @@ model Payment {
   @@map("payments")
 }
 
+model PaymentWebhookEvent {
+  id          String         @id @default(uuid()) @db.Uuid
+  gateway     PaymentGateway @default(RAZORPAY)
+  eventId     String         @db.VarChar(255)
+  eventType   String         @db.VarChar(100)
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@unique([gateway, eventId])
+  @@index([eventId])
+  @@index([eventType])
+  @@map("payment_webhook_events")
+}
+
 model Review {
   id         String          @id @default(uuid()) @db.Uuid
   bookingId  String          @unique @db.Uuid

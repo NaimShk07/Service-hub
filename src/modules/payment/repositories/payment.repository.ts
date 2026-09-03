@@ -1,7 +1,7 @@
 import { PrismaService } from "@database/prisma/prisma.service";
 import { BaseRepository } from "@database/repositories/base.repository";
 import { Injectable } from "@nestjs/common";
-import { PaymentStatus, Prisma } from "@prisma-client/client";
+import { PaymentGateway, PaymentStatus, Prisma } from "@prisma-client/client";
 
 @Injectable()
 export class PaymentRepository extends BaseRepository {
@@ -83,6 +83,35 @@ export class PaymentRepository extends BaseRepository {
         ...(details?.paidAt && { paidAt: details.paidAt }),
         ...(details?.refundedAt && { refundedAt: details.refundedAt }),
       },
+    });
+  }
+
+  async findWebhookEvent(gateway: PaymentGateway, eventId: string) {
+    return await this.prisma.paymentWebhookEvent.findUnique({
+      where: {
+        gateway_eventId: {
+          gateway,
+          eventId,
+        },
+      },
+    });
+  }
+
+  async recordWebhookEvent(
+    data: Prisma.PaymentWebhookEventUncheckedCreateInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx || this.prisma;
+    return await client.paymentWebhookEvent.create({
+      data,
+    });
+  }
+
+  async markWebhookEventProcessed(id: string, tx?: Prisma.TransactionClient) {
+    const client = tx || this.prisma;
+    return await client.paymentWebhookEvent.update({
+      where: { id },
+      data: { processedAt: new Date() },
     });
   }
 }

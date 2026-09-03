@@ -20,6 +20,7 @@ import {
 } from "@prisma-client/enums";
 import { VerifyPaymentDto } from "../dto/verify-payment.dto";
 import { canTransitionPayment } from "../domain/payment-state-machine";
+import { Prisma } from "@prisma-client/client";
 
 @Injectable()
 export class PaymentService {
@@ -223,7 +224,11 @@ export class PaymentService {
     return payment;
   }
 
-  async handleWebhookEvent(rawBody: Buffer, signature: string) {
+  async handleWebhookEvent(
+    rawBody: Buffer,
+    signature: string,
+    headerEventId?: string,
+  ) {
     this.logger.log("Received incoming Razorpay webhook");
 
     if (!rawBody || !signature) {
@@ -251,9 +256,31 @@ export class PaymentService {
     }
 
     const eventName = eventPayload.event;
-    this.logger.log(`Processing Razorpay webhook event: "${eventName}"`);
+    // Extract unique event ID from Razorpay header or payload
+    const eventId =
+      headerEventId ||
+      eventPayload.event_id ||
+      eventPayload.id ||
+      `${eventPayload.payload?.payment?.entity?.id}_${eventName}`;
 
-    // 3. Extract Order & Payment Identifiers
+    this.logger.log(
+      `Processing Razorpay webhook event: "${eventName}", eventId: "${eventId}"`,
+    );
+
+    // 3. Idempotency Check: Have we already processed this event_id?
+    const existingEvent = await this.paymentRepository.findWebhookEvent(
+      PaymentGateway.RAZORPAY,
+      eventId,
+    );
+
+    if (existingEvent && existingEvent.processedAt) {
+      this.logger.log(
+        `Webhook event "${eventId}" was already processed at ${existingEvent.processedAt.toISOString()}. Idempotent skip.`,
+      );
+      return { received: true, status: "already_processed" };
+    }
+
+    // 4. Extract Order & Payment Identifiers
     const paymentEntity = eventPayload.payload?.payment?.entity;
     const orderEntity = eventPayload.payload?.order?.entity;
 
@@ -262,125 +289,176 @@ export class PaymentService {
 
     if (!gatewayOrderId) {
       this.logger.log(
-        `Event "${eventName}" does not contain a gateway order ID. Skipping.`,
+        `Event "${eventName}" does not contain a gateway order ID. Recording & skipping.`,
       );
+      await this.paymentRepository.recordWebhookEvent({
+        gateway: PaymentGateway.RAZORPAY,
+        eventId,
+        eventType: eventName,
+        payload: eventPayload,
+        processedAt: new Date(),
+      });
       return { received: true, ignored: true };
     }
 
-    // 4. Fetch Matching Payment & Booking Record
+    // 5. Fetch Matching Payment & Booking Record
     const payment =
       await this.paymentRepository.findByGatewayOrderId(gatewayOrderId);
+
     if (!payment) {
       this.logger.warn(
-        `No payment record found for order "${gatewayOrderId}". Skipping.`,
+        `No payment record found for order "${gatewayOrderId}". Recording & skipping.`,
       );
+      await this.paymentRepository.recordWebhookEvent({
+        gateway: PaymentGateway.RAZORPAY,
+        eventId,
+        eventType: eventName,
+        payload: eventPayload,
+        processedAt: new Date(),
+      });
       return { received: true, ignored: true };
     }
 
-    // 5. Handle Event Types
-    switch (eventName) {
-      case "payment.captured":
-      case "order.paid": {
-        // Idempotency: If already confirmed, do not repeat writes
-        if (
-          payment.status === PaymentStatus.SUCCESS &&
-          payment.booking.bookingStatus === BookingStatus.CONFIRMED
-        ) {
-          this.logger.log(
-            `Order "${gatewayOrderId}" already marked SUCCESS. Idempotent skip.`,
-          );
-          return { received: true, status: "already_processed" };
-        }
-
-        if (!canTransitionPayment(payment.status, PaymentStatus.SUCCESS)) {
-          this.logger.warn(
-            `Cannot transition payment ${payment.id} from ${payment.status} to SUCCESS`,
-          );
-          return { received: true, ignored: true };
-        }
-
-        return await this.prisma.$transaction(async (tx) => {
-          await this.paymentRepository.updateStatus(
-            payment.id,
-            PaymentStatus.SUCCESS,
-            {
-              gatewayPaymentId: gatewayPaymentId || payment.gatewayPaymentId,
-              paidAt: new Date(),
-            },
-            tx,
-          );
-
-          await this.bookingRepository.updateStatus(
-            payment.bookingId,
-            BookingStatus.CONFIRMED,
-            undefined,
-            tx,
-          );
-
-          await tx.auditLog.create({
-            data: {
-              actorUserId: payment.booking.customerId,
-              entityType: "Payment",
-              entityId: payment.id,
-              action: AuditAction.PAYMENT_SUCCESS,
-              oldValue: { status: payment.status },
-              newValue: { status: PaymentStatus.SUCCESS, event: eventName },
-            },
-          });
-          await tx.auditLog.create({
-            data: {
-              actorUserId: payment.booking.customerId,
-              entityType: "Booking",
-              entityId: payment.bookingId,
-              action: AuditAction.BOOKING_CONFIRMED,
-              oldValue: { status: payment.booking.bookingStatus },
-              newValue: { status: BookingStatus.CONFIRMED, source: "webhook" },
-            },
-          });
-          this.logger.log(
-            `Webhook confirmed Booking "${payment.bookingId}" via Payment "${payment.id}"`,
-          );
-          return { received: true, status: "confirmed" };
-        });
-      }
-      case "payment.failed": {
-        if (payment.status === PaymentStatus.FAILED) {
-          return { received: true, status: "already_failed" };
-        }
-
-        return await this.prisma.$transaction(async (tx) => {
-          await this.paymentRepository.updateStatus(
-            payment.id,
-            PaymentStatus.FAILED,
-            { gatewayPaymentId },
-            tx,
-          );
-          await this.bookingRepository.updateStatus(
-            payment.bookingId,
-            BookingStatus.PAYMENT_FAILED,
-            paymentEntity?.error_description || "Payment failed via gateway",
-            tx,
-          );
-          await tx.auditLog.create({
-            data: {
-              actorUserId: payment.booking.customerId,
-              entityType: "Payment",
-              entityId: payment.id,
-              action: AuditAction.PAYMENT_FAILED,
-              newValue: {
-                status: PaymentStatus.FAILED,
-                error: paymentEntity?.error_description,
-              },
-            },
-          });
-          return { received: true, status: "failed" };
-        });
-      }
-      default:
-        this.logger.log(
-          `Unhandled webhook event type: "${eventName}". Returning 200.`,
+    // 6. Process Event Inside Atomic Transaction with Deduplication Record
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // A. Record Event (PostgreSQL @@unique([gateway, eventId]) blocks concurrent duplicates)
+        const recordedEvent = await this.paymentRepository.recordWebhookEvent(
+          {
+            gateway: PaymentGateway.RAZORPAY,
+            eventId,
+            eventType: eventName,
+            payload: eventPayload,
+          },
+          tx,
         );
-        return { received: true, ignored: true };
+
+        // B. Handle Business State Transitions
+        switch (eventName) {
+          case "payment.captured":
+          case "order.paid": {
+            if (
+              payment.status === PaymentStatus.SUCCESS &&
+              payment.booking.bookingStatus === BookingStatus.CONFIRMED
+            ) {
+              this.logger.log(
+                `Payment "${payment.id}" already in SUCCESS status.`,
+              );
+              break;
+            }
+
+            if (!canTransitionPayment(payment.status, PaymentStatus.SUCCESS)) {
+              this.logger.warn(
+                `Cannot transition payment ${payment.id} from ${payment.status} to SUCCESS`,
+              );
+              break;
+            }
+
+            await this.paymentRepository.updateStatus(
+              payment.id,
+              PaymentStatus.SUCCESS,
+              {
+                gatewayPaymentId: gatewayPaymentId || payment.gatewayPaymentId,
+                paidAt: new Date(),
+              },
+              tx,
+            );
+
+            await this.bookingRepository.updateStatus(
+              payment.bookingId,
+              BookingStatus.CONFIRMED,
+              undefined,
+              tx,
+            );
+
+            await tx.auditLog.create({
+              data: {
+                actorUserId: payment.booking.customerId,
+                entityType: "Payment",
+                entityId: payment.id,
+                action: AuditAction.PAYMENT_SUCCESS,
+                oldValue: { status: payment.status },
+                newValue: { status: PaymentStatus.SUCCESS, event: eventName },
+              },
+            });
+
+            await tx.auditLog.create({
+              data: {
+                actorUserId: payment.booking.customerId,
+                entityType: "Booking",
+                entityId: payment.bookingId,
+                action: AuditAction.BOOKING_CONFIRMED,
+                oldValue: { status: payment.booking.bookingStatus },
+                newValue: {
+                  status: BookingStatus.CONFIRMED,
+                  source: "webhook",
+                },
+              },
+            });
+            break;
+          }
+
+          case "payment.failed": {
+            if (payment.status !== PaymentStatus.FAILED) {
+              await this.paymentRepository.updateStatus(
+                payment.id,
+                PaymentStatus.FAILED,
+                { gatewayPaymentId },
+                tx,
+              );
+
+              await this.bookingRepository.updateStatus(
+                payment.bookingId,
+                BookingStatus.PAYMENT_FAILED,
+                paymentEntity?.error_description ||
+                  "Payment failed via gateway",
+                tx,
+              );
+
+              await tx.auditLog.create({
+                data: {
+                  actorUserId: payment.booking.customerId,
+                  entityType: "Payment",
+                  entityId: payment.id,
+                  action: AuditAction.PAYMENT_FAILED,
+                  newValue: {
+                    status: PaymentStatus.FAILED,
+                    error: paymentEntity?.error_description,
+                  },
+                },
+              });
+            }
+            break;
+          }
+
+          default:
+            this.logger.log(`Unhandled webhook event: "${eventName}"`);
+            break;
+        }
+
+        // C. Mark Webhook Event as Processed
+        await this.paymentRepository.markWebhookEventProcessed(
+          recordedEvent.id,
+          tx,
+        );
+
+        this.logger.log(
+          `Webhook event "${eventId}" (${eventName}) fully processed and committed.`,
+        );
+        return { received: true, status: "processed" };
+      });
+    } catch (error: any) {
+      // If a concurrent duplicate arrived at the exact same millisecond, catch P2002
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        this.logger.log(
+          `Concurrent duplicate webhook "${eventId}" detected. Returning 200 OK.`,
+        );
+        return { received: true, status: "already_processed" };
+      }
+      throw error;
     }
   }
 }
