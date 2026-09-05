@@ -21,6 +21,8 @@ import {
 import { VerifyPaymentDto } from "../dto/verify-payment.dto";
 import { canTransitionPayment } from "../domain/payment-state-machine";
 import { Prisma } from "@prisma-client/client";
+import { RefundPaymentDto } from "../dto/refund-payment.dto";
+import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 
 @Injectable()
 export class PaymentService {
@@ -358,6 +360,34 @@ export class PaymentService {
               );
               break;
             }
+
+            // 🛡️ SECURITY: Verify Amount & Currency Integrity
+            const expectedAmountPaise = toSmallestCurrencyUnit(
+              payment.amount,
+              payment.currency,
+            );
+
+            if (
+              paymentEntity?.amount &&
+              Number(paymentEntity.amount) !== expectedAmountPaise
+            ) {
+              this.logger.error(
+                `🚨 TAMPERING DETECTED: Order ${gatewayOrderId} expected ${expectedAmountPaise} paise, got ${paymentEntity.amount} paise!`,
+              );
+              break;
+            }
+
+            if (
+              paymentEntity?.currency &&
+              paymentEntity.currency.toUpperCase() !==
+                payment.currency.toUpperCase()
+            ) {
+              this.logger.error(
+                `🚨 TAMPERING DETECTED: Order ${gatewayOrderId} expected currency ${payment.currency}, got ${paymentEntity.currency}!`,
+              );
+              break;
+            }
+
             // Update Payment record to SUCCESS (Financial truth)
             await this.paymentRepository.updateStatus(
               payment.id,
@@ -454,6 +484,21 @@ export class PaymentService {
             }
             break;
           }
+          case "refund.processed":
+          case "payment.refunded": {
+            if (payment.status !== PaymentStatus.REFUNDED) {
+              await this.paymentRepository.updateStatus(
+                payment.id,
+                PaymentStatus.REFUNDED,
+                { refundedAt: new Date() },
+                tx,
+              );
+              this.logger.log(
+                `Payment "${payment.id}" reconciled to REFUNDED via webhook`,
+              );
+            }
+            break;
+          }
           default:
             this.logger.log(`Unhandled webhook event: "${eventName}"`);
             break;
@@ -483,5 +528,84 @@ export class PaymentService {
       }
       throw error;
     }
+  }
+
+  async refundPayment(
+    adminUserId: string,
+    paymentId: string,
+    dto: RefundPaymentDto,
+  ) {
+    this.logger.log(
+      `Admin ${adminUserId} initiated refund for payment: ${paymentId}`,
+    );
+
+    const payment = await this.paymentRepository.findById(paymentId);
+    if (!payment) {
+      throw new NotFoundException(`Payment with ID "${paymentId}" not found`);
+    }
+
+    if (payment.status !== PaymentStatus.SUCCESS) {
+      throw new BadRequestException(
+        `Only SUCCESS payments can be refunded. Current status: "${payment.status}"`,
+      );
+    }
+
+    if (!payment.gatewayPaymentId) {
+      throw new BadRequestException(
+        "Payment does not have a gateway transaction ID",
+      );
+    }
+
+    // Upstream gateway refund request
+    const refundResult = await this.paymentGateway.createRefund({
+      paymentId: payment.gatewayPaymentId,
+      amount: dto.amount || Number(payment.amount),
+      notes: { reason: dto.reason || "Admin initiated refund" },
+    });
+
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Transition Payment to REFUNDED
+      const updatedPayment = await this.paymentRepository.updateStatus(
+        payment.id,
+        PaymentStatus.REFUNDED,
+        { refundedAt: new Date() },
+        tx,
+      );
+
+      // 2. Transition Booking to CANCELLED (if not already CANCELLED)
+      if (payment.booking.bookingStatus !== BookingStatus.CANCELLED) {
+        await this.bookingRepository.updateStatus(
+          payment.bookingId,
+          BookingStatus.CANCELLED,
+          dto.reason || "Refunded by Admin",
+          tx,
+        );
+      }
+
+      // 3. Audit Log
+      await tx.auditLog.create({
+        data: {
+          actorUserId: adminUserId,
+          entityType: "Payment",
+          entityId: payment.id,
+          action: AuditAction.PAYMENT_SUCCESS,
+          oldValue: { status: payment.status },
+          newValue: {
+            status: PaymentStatus.REFUNDED,
+            refundId: refundResult.refundId,
+            reason: dto.reason || "Admin refund",
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: "Payment refunded successfully",
+        paymentId: updatedPayment.id,
+        status: updatedPayment.status,
+        refundId: refundResult.refundId,
+        refundedAt: updatedPayment.refundedAt,
+      };
+    });
   }
 }

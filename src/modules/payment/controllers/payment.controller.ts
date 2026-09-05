@@ -4,6 +4,8 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -22,6 +24,8 @@ import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { CreatePaymentOrderDto } from "../dto/create-payment-order.dto";
 import { VerifyPaymentDto } from "../dto/verify-payment.dto";
 import { Request } from "express";
+import { RefundPaymentDto } from "../dto/refund-payment.dto";
+import { AdminGuard } from "@modules/auth/guards/admin.guard";
 
 @ApiTags("Payments")
 @Controller("payments")
@@ -59,6 +63,7 @@ export class PaymentController {
   }
 
   @Post("webhook")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Public webhook endpoint for Razorpay server events (No JWT)",
   })
@@ -95,5 +100,21 @@ export class PaymentController {
     @CurrentUser("userId") userId: string,
   ) {
     return await this.paymentService.getPaymentById(id, userId);
+  }
+
+  @Post(":id/refund")
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Refund a successful payment (Admin only)" })
+  @ApiResponse({ status: 200, description: "Payment refunded successfully" })
+  @ApiResponse({ status: 400, description: "Payment not in SUCCESS state" })
+  @ApiResponse({ status: 403, description: "Admin access required" })
+  @ApiResponse({ status: 404, description: "Payment not found" })
+  async refundPayment(
+    @CurrentUser("userId") adminUserId: string,
+    @Param("id", ParseUUIDPipe) paymentId: string,
+    @Body() dto: RefundPaymentDto,
+  ) {
+    return await this.paymentService.refundPayment(adminUserId, paymentId, dto);
   }
 }

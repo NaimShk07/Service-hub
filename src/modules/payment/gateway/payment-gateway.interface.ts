@@ -14,11 +14,26 @@ export interface GatewayOrderResult {
   rawPayload?: any;
 }
 
+export interface CreateRefundParams {
+  paymentId: string;
+  amount?: number; // in standard currency units (optional for partial, defaults to full)
+  notes?: Record<string, string>;
+}
+
+export interface GatewayRefundResult {
+  refundId: string;
+  amount: number;
+  status: string;
+  rawPayload?: any;
+}
+
 export interface IPaymentGateway {
   /**
    * Creates an upstream order with the payment provider
    */
   createOrder(params: CreateGatewayOrderParams): Promise<GatewayOrderResult>;
+
+  createRefund(params: CreateRefundParams): Promise<GatewayRefundResult>;
 
   /**
    * Verifies the client checkout signature: HMAC_SHA256(order_id + "|" + payment_id, secret)

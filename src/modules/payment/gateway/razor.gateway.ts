@@ -1,7 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import {
   CreateGatewayOrderParams,
+  CreateRefundParams,
   GatewayOrderResult,
+  GatewayRefundResult,
   IPaymentGateway,
 } from "./payment-gateway.interface";
 import { ConfigService } from "@nestjs/config";
@@ -50,6 +52,24 @@ export class RazorpayGateway implements IPaymentGateway {
         id: mockGatewayOrderId,
         amount: amountInPaise,
         currency: params.currency,
+      },
+    };
+  }
+
+  async createRefund(params: CreateRefundParams): Promise<GatewayRefundResult> {
+    this.logger.log(
+      `Initiating Razorpay Refund for payment: ${params.paymentId}`,
+    );
+    const mockRefundId = `rfnd_${crypto.randomBytes(8).toString("hex")}`;
+
+    return {
+      refundId: mockRefundId,
+      amount: params.amount || 0,
+      status: "processed",
+      rawPayload: {
+        id: mockRefundId,
+        payment_id: params.paymentId,
+        status: "processed",
       },
     };
   }
