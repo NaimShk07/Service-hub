@@ -17,6 +17,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { CacheModule } from "@common/cache/cache.module";
 import { BookingModule } from "@modules/booking/booking.module";
 import { PaymentModule } from "@modules/payment/payment.module";
+import { JobsModule } from "./jobs/jobs.module";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { PaymentModule } from "@modules/payment/payment.module";
     CacheModule,
     BookingModule,
     PaymentModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [

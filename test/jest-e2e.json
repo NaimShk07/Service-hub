@@ -14,6 +14,6 @@
     "^@prisma-client/(.*)$": "<rootDir>/../generated/prisma/$1"
   },
   "transformIgnorePatterns": [
-    "/node_modules/(?!(uuid)/)"
+    "/node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared|bullmq|uuid)/)"
   ]
 }
