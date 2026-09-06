@@ -5,9 +5,10 @@ import { BookingModule } from "@modules/booking/booking.module";
 import { PaymentController } from "./controllers/payment.controller";
 import { PAYMENT_GATEWAY } from "./gateway/payment-gateway.token";
 import { RazorpayGateway } from "./gateway/razor.gateway";
+import { JobsModule } from "@jobs/jobs.module";
 
 @Module({
-  imports: [forwardRef(() => BookingModule)],
+  imports: [forwardRef(() => BookingModule), JobsModule],
   controllers: [PaymentController],
   providers: [
     PaymentService,

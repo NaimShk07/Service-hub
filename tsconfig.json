@@ -29,7 +29,8 @@
       "@modules/*": ["src/modules/*"],
       "@config/*": ["src/config/*"],
       "@database/*": ["src/database/*"],
-      "@prisma-client/*": ["generated/prisma/*"]
+      "@prisma-client/*": ["generated/prisma/*"],
+      "@jobs/*": ["src/jobs/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

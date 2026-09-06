@@ -11,7 +11,8 @@
     "^@modules/(.*)$": "<rootDir>/../src/modules/$1",
     "^@config/(.*)$": "<rootDir>/../src/config/$1",
     "^@database/(.*)$": "<rootDir>/../src/database/$1",
-    "^@prisma-client/(.*)$": "<rootDir>/../generated/prisma/$1"
+    "^@prisma-client/(.*)$": "<rootDir>/../generated/prisma/$1",
+    "^@jobs/(.*)$": "<rootDir>/../src/jobs/$1"
   },
   "transformIgnorePatterns": [
     "/node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared|bullmq|uuid)/)"

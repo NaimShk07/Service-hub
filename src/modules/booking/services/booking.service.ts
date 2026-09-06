@@ -27,6 +27,7 @@ import { Prisma } from "@prisma-client/client";
 import { PAYMENT_GATEWAY } from "@modules/payment/gateway/payment-gateway.token";
 import { IPaymentGateway } from "@modules/payment/gateway/payment-gateway.interface";
 import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
+import { NotificationQueueService } from "@jobs/queues/notification.queue";
 
 @Injectable()
 export class BookingService {
@@ -38,6 +39,7 @@ export class BookingService {
     private readonly providerAvailabilityRepository: ProviderAvailabilityRepository,
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
+    private readonly notificationQueueService: NotificationQueueService,
   ) {}
 
   async createBooking(customerId: string, dto: CreateBookingDto) {
@@ -52,13 +54,16 @@ export class BookingService {
         "Provider service offering not found or inactive",
       );
     }
+
     const provider = providerService.provider;
+
     if (
       !provider ||
       provider.verificationStatus !== VerificationStatus.VERIFIED
     ) {
       throw new BadRequestException("Provider profile is not verified");
     }
+
     if (provider.user?.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException(
         "Provider account is currently suspended or inactive",
@@ -70,9 +75,11 @@ export class BookingService {
     if (isNaN(startsAtDate.getTime())) {
       throw new BadRequestException("Invalid date format for startsAt");
     }
+
     if (startsAtDate < new Date()) {
       throw new BadRequestException("Booking start time cannot be in the past");
     }
+
     const maxAdvanceDate = new Date();
     maxAdvanceDate.setDate(maxAdvanceDate.getDate() + 30);
     if (startsAtDate > maxAdvanceDate) {
@@ -95,6 +102,7 @@ export class BookingService {
         "Provider is not available on this day of the week",
       );
     }
+
     const startMinutes =
       startsAtDate.getUTCHours() * 60 + startsAtDate.getUTCMinutes();
     const occupiedEndMinutes =
@@ -108,6 +116,7 @@ export class BookingService {
       const shiftEnd = endH * 60 + endM;
       return startMinutes >= shiftStart && occupiedEndMinutes <= shiftEnd;
     });
+
     if (!fitsInShift) {
       throw new BadRequestException(
         "Requested booking slot (including post-service buffer) exceeds provider working shift hours",
@@ -150,6 +159,7 @@ export class BookingService {
           },
           tx,
         );
+
         // B. Insert Initial Payment record
         const payment = await tx.payment.create({
           data: {
@@ -161,6 +171,7 @@ export class BookingService {
             status: PaymentStatus.CREATED,
           },
         });
+
         // C. Insert Audit Log
         await tx.auditLog.create({
           data: {
@@ -177,9 +188,11 @@ export class BookingService {
             },
           },
         });
+
         this.logger.log(
           `Successfully created booking "${booking.id}" with payment order "${gatewayOrder.gatewayOrderId}"`,
         );
+
         // Return combined payload with Razorpay checkout details
         return {
           ...booking,
@@ -220,6 +233,7 @@ export class BookingService {
           "The selected time slot is no longer available. Please select another slot.",
         );
       }
+
       throw error;
     }
   }
@@ -286,7 +300,7 @@ export class BookingService {
       );
     }
 
-    return await this.prisma.$transaction(async (tx) => {
+    const updatedBooking = await this.prisma.$transaction(async (tx) => {
       const updatedBooking = await this.bookingRepository.updateStatus(
         bookingId,
         BookingStatus.CANCELLED,
@@ -312,7 +326,13 @@ export class BookingService {
       this.logger.log(
         `Booking ${bookingId} cancelled by customer ${customerId}`,
       );
+
       return updatedBooking;
     });
+
+    // Cancel pending reminders in Redis after DB transaction successfully commits
+    await this.notificationQueueService.cancelBookingReminders(bookingId);
+
+    return updatedBooking;
   }
 }

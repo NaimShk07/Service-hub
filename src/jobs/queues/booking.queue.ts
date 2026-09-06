@@ -22,7 +22,7 @@ export class BookingQueueService {
    * Schedules a delayed job to expire a reservation if payment is not received in time (e.g. 15 mins).
    */
   async schedulePaymentExpiration(bookingId: string, delayMs: number) {
-    const jobId = `expire-payment:${bookingId}`;
+    const jobId = `expire-payment_${bookingId}`;
     this.logger.log(
       `Scheduling payment expiration for booking ${bookingId} in ${delayMs / 1000}s [jobId: ${jobId}]`,
     );
@@ -46,7 +46,7 @@ export class BookingQueueService {
    * If payment succeeds before the timeout, cancel the pending expiration job!
    */
   async cancelPaymentExpiration(bookingId: string) {
-    const jobId = `expire-payment:${bookingId}`;
+    const jobId = `expire-payment_${bookingId}`;
     const job = await this.bookingQueue.getJob(jobId);
     if (job) {
       await job.remove();

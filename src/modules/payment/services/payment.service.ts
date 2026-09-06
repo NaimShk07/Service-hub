@@ -23,6 +23,7 @@ import { canTransitionPayment } from "../domain/payment-state-machine";
 import { Prisma } from "@prisma-client/client";
 import { RefundPaymentDto } from "../dto/refund-payment.dto";
 import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
+import { NotificationQueueService } from "@jobs/queues/notification.queue";
 
 @Injectable()
 export class PaymentService {
@@ -33,6 +34,7 @@ export class PaymentService {
     private readonly bookingRepository: BookingRepository,
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
+    private readonly notificationQueueService: NotificationQueueService,
   ) {}
 
   async createPaymentOrder(customerId: string, dto: CreatePaymentOrderDto) {
@@ -160,7 +162,7 @@ export class PaymentService {
     }
 
     // 5. Execute Atomic Transition in $transaction
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Update Payment to SUCCESS
       const updatedPayment = await this.paymentRepository.updateStatus(
         payment.id,
@@ -219,13 +221,21 @@ export class PaymentService {
         paidAt: updatedPayment.paidAt,
       };
     });
+
+    await this.notificationQueueService.scheduleBookingLifecycleNotifications(
+      payment.bookingId,
+    );
+
+    return result;
   }
 
   async getPaymentById(paymentId: string, userId: string) {
     const payment = await this.paymentRepository.findById(paymentId);
+
     if (!payment) {
       throw new NotFoundException(`Payment with ID "${paymentId}" not found`);
     }
+
     if (
       payment.booking.customerId !== userId &&
       payment.booking.provider.userId !== userId
@@ -267,6 +277,7 @@ export class PaymentService {
     }
 
     const eventName = eventPayload.event;
+
     // Extract unique event ID from Razorpay header or payload
     const eventId =
       headerEventId ||
@@ -331,8 +342,9 @@ export class PaymentService {
     }
 
     // 6. Process Event Inside Atomic Transaction with Deduplication Record
+    let confirmedBookingId: string | null = null;
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const txResult = await this.prisma.$transaction(async (tx) => {
         // A. Record Event (PostgreSQL @@unique([gateway, eventId]) blocks concurrent duplicates)
         const recordedEvent = await this.paymentRepository.recordWebhookEvent(
           {
@@ -354,6 +366,7 @@ export class PaymentService {
               );
               break;
             }
+
             if (!canTransitionPayment(payment.status, PaymentStatus.SUCCESS)) {
               this.logger.warn(
                 `Cannot transition payment ${payment.id} from ${payment.status} to SUCCESS`,
@@ -398,6 +411,7 @@ export class PaymentService {
               },
               tx,
             );
+
             await tx.auditLog.create({
               data: {
                 actorUserId: payment.booking.customerId,
@@ -408,6 +422,7 @@ export class PaymentService {
                 newValue: { status: PaymentStatus.SUCCESS, event: eventName },
               },
             });
+
             // ⚠️ RACE GUARD: Check if booking is still PENDING_PAYMENT
             if (
               payment.booking.bookingStatus === BookingStatus.PENDING_PAYMENT
@@ -418,6 +433,7 @@ export class PaymentService {
                 undefined,
                 tx,
               );
+
               await tx.auditLog.create({
                 data: {
                   actorUserId: payment.booking.customerId,
@@ -434,6 +450,8 @@ export class PaymentService {
               this.logger.log(
                 `Booking "${payment.bookingId}" CONFIRMED via webhook`,
               );
+
+              confirmedBookingId = payment.bookingId;
             } else {
               // 🛡️ Booking was already EXPIRED or CANCELLED! Do NOT resurrect it.
               this.logger.error(
@@ -477,6 +495,7 @@ export class PaymentService {
                   },
                 },
               });
+
               // 💡 Keep Booking in PENDING_PAYMENT so customer can retry payment
               this.logger.log(
                 `Payment "${payment.id}" failed. Booking "${payment.bookingId}" remains PENDING_PAYMENT for retry until expiration.`,
@@ -493,6 +512,7 @@ export class PaymentService {
                 { refundedAt: new Date() },
                 tx,
               );
+
               this.logger.log(
                 `Payment "${payment.id}" reconciled to REFUNDED via webhook`,
               );
@@ -515,6 +535,14 @@ export class PaymentService {
         );
         return { received: true, status: "processed" };
       });
+
+      if (confirmedBookingId) {
+        await this.notificationQueueService.scheduleBookingLifecycleNotifications(
+          confirmedBookingId,
+        );
+      }
+
+      return txResult;
     } catch (error: any) {
       // If a concurrent duplicate arrived at the exact same millisecond, catch P2002
       if (
