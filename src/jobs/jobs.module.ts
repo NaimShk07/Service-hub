@@ -6,6 +6,7 @@ import { NotificationProcessor } from "./processors/notification.processor";
 import { BookingProcessor } from "./processors/booking.processor";
 import { NotificationQueueService } from "./queues/notification.queue";
 import { BookingQueueService } from "./queues/booking.queue";
+import { MailerModule } from "@shared/mailer/mailer.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { BookingQueueService } from "./queues/booking.queue";
       { name: QUEUE_NOTIFICATION },
       { name: QUEUE_BOOKING },
     ),
+    MailerModule,
   ],
   providers: [
     NotificationProcessor,

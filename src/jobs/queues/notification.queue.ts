@@ -8,7 +8,11 @@ import {
   NOTIFICATION_JOBS,
   QUEUE_NOTIFICATION,
 } from "./queue.constants";
-import { NotificationChannel, NotificationType } from "@prisma-client/enums";
+import {
+  NotificationChannel,
+  NotificationStatus,
+  NotificationType,
+} from "@prisma-client/enums";
 import { PrismaService } from "@database/prisma/prisma.service";
 
 @Injectable()
@@ -31,12 +35,36 @@ export class NotificationQueueService {
       `Scheduling notification "${jobName}" with delay ${delayMs}ms, jobId: ${jobId || "auto"}`,
     );
 
-    return await this.notificationQueue.add(jobName, data, {
-      delay: delayMs,
-      jobId, // Custom jobId enforces deduplication if same notification is scheduled twice!
-      ...DEFAULT_RETRY_POLICY,
-      ...DEFAULT_JOB_REMOVAL_POLICY,
-    });
+    // 1. Persist initial PENDING record in PostgreSQL
+    let notificationId = data.notificationId;
+    if (!notificationId) {
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId: data.userId,
+          bookingId: data.bookingId,
+          type: data.type,
+          channel: data.channel,
+          status: NotificationStatus.PENDING,
+          title: data.title,
+          body: data.body,
+          scheduledFor: new Date(Date.now() + delayMs),
+          attemptCount: 0,
+        },
+      });
+      notificationId = notification.id;
+    }
+
+    // 2. Enqueue BullMQ Job with notificationId
+    return await this.notificationQueue.add(
+      jobName,
+      { ...data, notificationId },
+      {
+        delay: delayMs,
+        jobId, // Custom jobId enforces deduplication if same notification is scheduled twice!
+        ...DEFAULT_RETRY_POLICY,
+        ...DEFAULT_JOB_REMOVAL_POLICY,
+      },
+    );
   }
 
   /**
@@ -169,5 +197,13 @@ export class NotificationQueueService {
         this.logger.log(`Removed delayed notification job: "${jobId}"`);
       }
     }
+
+    // Also remove pending notification records for cancelled booking
+    await this.prisma.notification.deleteMany({
+      where: {
+        bookingId,
+        status: NotificationStatus.PENDING,
+      },
+    });
   }
 }

@@ -30,7 +30,8 @@
       "@config/*": ["src/config/*"],
       "@database/*": ["src/database/*"],
       "@prisma-client/*": ["generated/prisma/*"],
-      "@jobs/*": ["src/jobs/*"]
+      "@jobs/*": ["src/jobs/*"],
+      "@shared/*": ["src/shared/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

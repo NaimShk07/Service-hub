@@ -17,7 +17,7 @@ export const DEFAULT_RETRY_POLICY = {
   attempts: 3,
   backoff: {
     type: "exponential",
-    delay: 2000, // 2s -> 4s -> 8s
+    delay: 5000, // Attempt 1: 5s, Attempt 2: 10s, Attempt 3: 20s
   },
 } as const;
 
