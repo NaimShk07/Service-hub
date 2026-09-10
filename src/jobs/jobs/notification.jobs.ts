@@ -9,4 +9,5 @@ export interface SendNotificationJobPayload {
   title: string;
   body: string;
   metadata?: Record<string, any>;
+  scheduledFor?: Date | string;
 }

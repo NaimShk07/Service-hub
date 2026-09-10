@@ -38,6 +38,10 @@ export class NotificationQueueService {
     // 1. Persist initial PENDING record in PostgreSQL
     let notificationId = data.notificationId;
     if (!notificationId) {
+      const scheduleDate = data.scheduledFor
+        ? new Date(data.scheduledFor)
+        : new Date(Date.now() + delayMs);
+
       const notification = await this.prisma.notification.create({
         data: {
           userId: data.userId,
@@ -47,7 +51,7 @@ export class NotificationQueueService {
           status: NotificationStatus.PENDING,
           title: data.title,
           body: data.body,
-          scheduledFor: new Date(Date.now() + delayMs),
+          scheduledFor: scheduleDate,
           attemptCount: 0,
         },
       });
@@ -112,14 +116,19 @@ export class NotificationQueueService {
         channel: NotificationChannel.EMAIL,
         title: "Booking Confirmed! 🎉",
         body: `Your booking for "${booking.serviceName}" with ${booking.providerBusinessName} on ${appointmentStart.toDateString()} is confirmed.`,
+        scheduledFor: new Date(now),
       },
       0,
       `booking-confirm_${booking.id}`,
     );
 
     // 2. 24-Hour Reminder (startsAt - 24 hours)
+    // Edge Case: If appointment is less than 24h away (scheduledFor <= now) -> Skip!
     const delay24h = appointmentStart.getTime() - 24 * 60 * 60 * 1000 - now;
     if (delay24h > 0) {
+      const scheduledFor24h = new Date(
+        appointmentStart.getTime() - 24 * 60 * 60 * 1000,
+      );
       await this.sendNotification(
         NOTIFICATION_JOBS.REMINDER_24H,
         {
@@ -129,6 +138,7 @@ export class NotificationQueueService {
           channel: NotificationChannel.EMAIL,
           title: "Reminder: Service Tomorrow ⏰",
           body: `Reminder: Your service "${booking.serviceName}" is scheduled for tomorrow at ${appointmentStart.toTimeString().slice(0, 5)} UTC.`,
+          scheduledFor: scheduledFor24h,
         },
         delay24h,
         `reminder-24h_${booking.id}`,
@@ -139,8 +149,12 @@ export class NotificationQueueService {
     }
 
     // 3. 2-Hour Reminder (startsAt - 2 hours)
+    // Edge Case: If appointment is less than 2h away (scheduledFor <= now) -> Skip!
     const delay2h = appointmentStart.getTime() - 2 * 60 * 60 * 1000 - now;
     if (delay2h > 0) {
+      const scheduledFor2h = new Date(
+        appointmentStart.getTime() - 2 * 60 * 60 * 1000,
+      );
       await this.sendNotification(
         NOTIFICATION_JOBS.REMINDER_2H,
         {
@@ -150,6 +164,7 @@ export class NotificationQueueService {
           channel: NotificationChannel.PUSH,
           title: "Reminder: Provider Arriving in 2 Hours 🚀",
           body: `Your provider ${booking.providerBusinessName} will arrive in 2 hours for "${booking.serviceName}".`,
+          scheduledFor: scheduledFor2h,
         },
         delay2h,
         `reminder-2h_${booking.id}`,
@@ -162,6 +177,9 @@ export class NotificationQueueService {
     // 4. Post-Service Review Request (endsAt + 1 hour)
     const delayReview = appointmentEnd.getTime() + 1 * 60 * 60 * 1000 - now;
     if (delayReview > 0) {
+      const scheduledForReview = new Date(
+        appointmentEnd.getTime() + 1 * 60 * 60 * 1000,
+      );
       await this.sendNotification(
         NOTIFICATION_JOBS.REVIEW_REQUEST,
         {
@@ -171,6 +189,7 @@ export class NotificationQueueService {
           channel: NotificationChannel.EMAIL,
           title: "How was your service? ⭐",
           body: `Please rate your experience with ${booking.providerBusinessName} for "${booking.serviceName}".`,
+          scheduledFor: scheduledForReview,
         },
         delayReview,
         `review-request_${booking.id}`,
