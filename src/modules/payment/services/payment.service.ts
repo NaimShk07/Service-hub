@@ -24,6 +24,7 @@ import { Prisma } from "@prisma-client/client";
 import { RefundPaymentDto } from "../dto/refund-payment.dto";
 import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 import { NotificationQueueService } from "@jobs/queues/notification.queue";
+import { BookingQueueService } from "@jobs/queues/booking.queue";
 
 @Injectable()
 export class PaymentService {
@@ -35,6 +36,7 @@ export class PaymentService {
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
     private readonly notificationQueueService: NotificationQueueService,
+    private readonly bookingQueueService: BookingQueueService,
   ) {}
 
   async createPaymentOrder(customerId: string, dto: CreatePaymentOrderDto) {
@@ -221,6 +223,9 @@ export class PaymentService {
         paidAt: updatedPayment.paidAt,
       };
     });
+
+    // Cancel payment expiration job since payment succeeded
+    await this.bookingQueueService.cancelPaymentExpiration(payment.bookingId);
 
     await this.notificationQueueService.scheduleBookingLifecycleNotifications(
       payment.bookingId,
@@ -537,6 +542,9 @@ export class PaymentService {
       });
 
       if (confirmedBookingId) {
+        await this.bookingQueueService.cancelPaymentExpiration(
+          confirmedBookingId,
+        );
         await this.notificationQueueService.scheduleBookingLifecycleNotifications(
           confirmedBookingId,
         );

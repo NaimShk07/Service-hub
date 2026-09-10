@@ -28,6 +28,7 @@ import { PAYMENT_GATEWAY } from "@modules/payment/gateway/payment-gateway.token"
 import { IPaymentGateway } from "@modules/payment/gateway/payment-gateway.interface";
 import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 import { NotificationQueueService } from "@jobs/queues/notification.queue";
+import { BookingQueueService } from "@jobs/queues/booking.queue";
 
 @Injectable()
 export class BookingService {
@@ -40,6 +41,7 @@ export class BookingService {
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
     private readonly notificationQueueService: NotificationQueueService,
+    private readonly bookingQueueService: BookingQueueService,
   ) {}
 
   async createBooking(customerId: string, dto: CreateBookingDto) {
@@ -139,7 +141,7 @@ export class BookingService {
 
     // 6. Execute Atomic Transaction: Booking + Payment + AuditLog
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         // A. Insert Booking record
         const booking = await this.bookingRepository.create(
           {
@@ -206,6 +208,15 @@ export class BookingService {
           },
         };
       });
+
+      // Schedule delayed job to expire reservation if payment is not completed in 15 mins
+      const PAYMENT_EXPIRATION_DELAY_MS = 15 * 60 * 1000; // 15 minutes
+      await this.bookingQueueService.schedulePaymentExpiration(
+        result.id,
+        PAYMENT_EXPIRATION_DELAY_MS,
+      );
+
+      return result;
     } catch (error: any) {
       if (
         error?.code === "P2002" ||
@@ -331,6 +342,7 @@ export class BookingService {
     });
 
     // Cancel pending reminders in Redis after DB transaction successfully commits
+    await this.bookingQueueService.cancelPaymentExpiration(bookingId);
     await this.notificationQueueService.cancelBookingReminders(bookingId);
 
     return updatedBooking;
