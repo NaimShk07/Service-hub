@@ -18,6 +18,7 @@ import { CacheModule } from "@common/cache/cache.module";
 import { BookingModule } from "@modules/booking/booking.module";
 import { PaymentModule } from "@modules/payment/payment.module";
 import { JobsModule } from "./jobs/jobs.module";
+import { NotificationModule } from "@modules/notification/notification.module";
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { JobsModule } from "./jobs/jobs.module";
     BookingModule,
     PaymentModule,
     JobsModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [

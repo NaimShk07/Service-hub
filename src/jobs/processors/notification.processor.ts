@@ -25,11 +25,12 @@ export class NotificationProcessor extends WorkerHost {
   }
 
   async process(job: Job<SendNotificationJobPayload>): Promise<any> {
+    const startTime = Date.now();
     const { notificationId, userId, bookingId, type, channel, title, body } =
       job.data;
 
     this.logger.log(
-      `Processing notification job [${job.id}] "${job.name}" for user ${job.data.userId}`,
+      `[notification] job started jobId=${job.id} name=${job.name} (Attempt ${job.attemptsMade + 1}) for user ${userId}`,
     );
 
     // 1. Load Notification record
@@ -123,8 +124,9 @@ export class NotificationProcessor extends WorkerHost {
         },
       });
 
+      const duration = Date.now() - startTime;
       this.logger.log(
-        `✅ Notification [${updated.id}] successfully delivered to ${user.email}`,
+        `[notification] email sent jobId=${job.id} duration=${duration}ms delivered to ${user.email}`,
       );
 
       return {
@@ -134,8 +136,9 @@ export class NotificationProcessor extends WorkerHost {
       };
     } catch (error: any) {
       // 6. Record intermediate attempt count & failure reason in DB, then RE-THROW to trigger BullMQ retry
+      const duration = Date.now() - startTime;
       this.logger.warn(
-        `Notification attempt ${job.attemptsMade + 1} failed for user ${user.email}: ${error.message}`,
+        `[notification] job failed jobId=${job.id} attempt=${job.attemptsMade + 1} duration=${duration}ms error=${error.message}`,
       );
       if (notification) {
         await this.prisma.notification.update({

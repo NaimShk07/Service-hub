@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { QUEUE_BOOKING, QUEUE_NOTIFICATION } from "./queues/queue.constants";
@@ -7,9 +7,11 @@ import { BookingProcessor } from "./processors/booking.processor";
 import { NotificationQueueService } from "./queues/notification.queue";
 import { BookingQueueService } from "./queues/booking.queue";
 import { MailerModule } from "@shared/mailer/mailer.module";
+import { BookingModule } from "@modules/booking/booking.module";
 
 @Module({
   imports: [
+    forwardRef(() => BookingModule),
     // 1. Root Redis connection for BullMQ
     BullModule.forRootAsync({
       imports: [ConfigModule],

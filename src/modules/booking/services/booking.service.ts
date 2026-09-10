@@ -347,4 +347,85 @@ export class BookingService {
 
     return updatedBooking;
   }
+
+  /**
+   * Domain logic to expire a pending booking and release the slot.
+   * Concurrency-safe: uses conditional updateMany to prevent double-expiration races.
+   */
+  async expireBooking(bookingId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.findUnique({
+        where: { id: bookingId },
+        include: { payments: true },
+      });
+
+      if (!booking) {
+        this.logger.warn(`Booking [${bookingId}] not found for expiration.`);
+        return { skipped: true, reason: "booking_not_found" };
+      }
+
+      // Idempotency: skip if already confirmed, cancelled, or expired
+      if (booking.bookingStatus !== BookingStatus.PENDING_PAYMENT) {
+        this.logger.log(
+          `Booking [${bookingId}] is in "${booking.bookingStatus}" status. Expiration skipped (Idempotent).`,
+        );
+        return {
+          skipped: true,
+          currentStatus: booking.bookingStatus,
+          reason: "already_transitioned",
+        };
+      }
+
+      // Concurrency guard: updateMany ensures exactly one worker performs the transition
+      const updateResult = await tx.booking.updateMany({
+        where: {
+          id: bookingId,
+          bookingStatus: BookingStatus.PENDING_PAYMENT,
+        },
+        data: {
+          bookingStatus: BookingStatus.EXPIRED,
+        },
+      });
+
+      if (updateResult.count === 0) {
+        this.logger.warn(
+          `Concurrent update guard: Booking [${bookingId}] was already transitioned by another worker.`,
+        );
+        return { skipped: true, reason: "already_transitioned" };
+      }
+
+      // Mark lingering unpaid payments as FAILED
+      await tx.payment.updateMany({
+        where: {
+          bookingId,
+          status: { in: [PaymentStatus.CREATED, PaymentStatus.PENDING] },
+        },
+        data: {
+          status: PaymentStatus.FAILED,
+        },
+      });
+
+      // Audit Log
+      await tx.auditLog.create({
+        data: {
+          actorUserId: booking.customerId,
+          entityType: "Booking",
+          entityId: bookingId,
+          action: AuditAction.BOOKING_CANCELLED,
+          oldValue: { status: booking.bookingStatus },
+          newValue: {
+            status: BookingStatus.EXPIRED,
+            reason: "Payment window expired",
+            expiredAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      this.logger.log(
+        `✅ Booking [${bookingId}] expired and time slot released.`,
+      );
+
+      return { expired: true, bookingId };
+    });
+  }
 }
