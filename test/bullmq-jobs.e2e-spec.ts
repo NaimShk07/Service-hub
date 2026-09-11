@@ -5,6 +5,7 @@ import { JwtService } from "@nestjs/jwt";
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "@database/prisma/prisma.service";
 import {
+  AuditAction,
   BookingStatus,
   NotificationChannel,
   NotificationStatus,
@@ -18,6 +19,7 @@ import {
 } from "@prisma-client/enums";
 import { BookingService } from "@modules/booking/services/booking.service";
 import { NotificationQueueService } from "@jobs/queues/notification.queue";
+import { BookingQueueService } from "@jobs/queues/booking.queue";
 import { EmailService } from "@shared/mailer/email.service";
 import { NotificationProcessor } from "@jobs/processors/notification.processor";
 import { Job } from "bullmq";
@@ -26,11 +28,13 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
   let app: INestApplication;
   let prisma: PrismaService;
   let bookingService: BookingService;
+  let bookingQueueService: BookingQueueService;
   let notificationQueueService: NotificationQueueService;
   let notificationProcessor: NotificationProcessor;
   let emailService: EmailService;
 
   let testCustomer: any;
+  let testProviderUser: any;
   let testProvider: any;
   let testCategory: any;
   let testService: any;
@@ -50,6 +54,7 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
 
     prisma = app.get(PrismaService);
     bookingService = app.get(BookingService);
+    bookingQueueService = app.get(BookingQueueService);
     notificationQueueService = app.get(NotificationQueueService);
     notificationProcessor = app.get(NotificationProcessor);
     emailService = app.get(EmailService);
@@ -78,6 +83,7 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
         status: UserStatus.ACTIVE,
       },
     });
+    testProviderUser = providerUser;
 
     testProvider = await prisma.providerProfile.create({
       data: {
@@ -120,12 +126,25 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
         where: { booking: { customerId: testCustomer.id } },
       });
       await prisma.auditLog.deleteMany({
-        where: { actorUserId: testCustomer.id },
+        where: {
+          OR: [
+            { actorUserId: testCustomer.id },
+            { actorUserId: testProviderUser?.id },
+            { entityType: "Booking" },
+          ],
+        },
       });
       await prisma.booking.deleteMany({
         where: { customerId: testCustomer.id },
       });
-      await prisma.user.delete({ where: { id: testCustomer.id } });
+      await prisma.user
+        .delete({ where: { id: testCustomer.id } })
+        .catch(() => null);
+    }
+    if (testProviderUser) {
+      await prisma.user
+        .delete({ where: { id: testProviderUser.id } })
+        .catch(() => null);
     }
     await prisma.$disconnect();
     await app.close();
@@ -490,6 +509,164 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
       expect(res.status).toBe(200);
       const body = res.body.data || res.body;
       expect(body.success).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  describe("Group 6: No-Show / Completion Lifecycle & Overdue Review Flagging (Day 6)", () => {
+    let providerToken: string;
+    let nonProviderToken: string;
+    let otherUser: any;
+
+    beforeAll(async () => {
+      const jwtService = app.get(JwtService);
+      providerToken = await jwtService.signAsync({
+        sub: testProviderUser.id,
+        email: testProviderUser.email,
+        role: testProviderUser.role,
+      });
+
+      // Another user that is not the assigned provider
+      otherUser = await prisma.user.create({
+        data: {
+          email: `other_${Date.now()}@example.com`,
+          passwordHash: "hash123",
+          firstName: "Other",
+          lastName: "User",
+          phone: `+91${(Date.now() + 2).toString().slice(-10)}`,
+          role: Role.USER,
+          status: UserStatus.ACTIVE,
+        },
+      });
+
+      nonProviderToken = await jwtService.signAsync({
+        sub: otherUser.id,
+        email: otherUser.email,
+        role: otherUser.role,
+      });
+    });
+
+    afterAll(async () => {
+      if (otherUser) {
+        await prisma.user
+          .delete({ where: { id: otherUser.id } })
+          .catch(() => null);
+      }
+    });
+
+    it("✓ Provider successfully marks CONFIRMED booking as COMPLETED and cancels overdue check", async () => {
+      const { booking } = await createTestBooking(BookingStatus.CONFIRMED);
+
+      // Schedule overdue check
+      await bookingQueueService.scheduleOverdueCheck(booking.id, 60000);
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${booking.id}/complete`)
+        .set("Authorization", `Bearer ${providerToken}`);
+
+      expect(res.status).toBe(201);
+      const body = res.body.data || res.body;
+      expect(body.bookingStatus).toBe(BookingStatus.COMPLETED);
+      expect(body.completedAt).toBeDefined();
+
+      // Check DB directly
+      const updated = await prisma.booking.findUnique({
+        where: { id: booking.id },
+      });
+      expect(updated?.bookingStatus).toBe(BookingStatus.COMPLETED);
+      expect(updated?.completedAt).not.toBeNull();
+
+      // Overdue check job should be cancelled in queue
+      const cancelled = await bookingQueueService.cancelOverdueCheck(
+        booking.id,
+      );
+      expect(cancelled).toBe(false); // already removed by completeBooking!
+
+      // Audit log should be recorded
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          entityId: booking.id,
+          action: AuditAction.BOOKING_COMPLETED,
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorUserId).toBe(testProviderUser.id);
+    });
+
+    it("✓ Non-assigned user is forbidden from completing the booking", async () => {
+      const { booking } = await createTestBooking(BookingStatus.CONFIRMED);
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${booking.id}/complete`)
+        .set("Authorization", `Bearer ${nonProviderToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("✓ Cannot complete booking if not in CONFIRMED status", async () => {
+      const { booking } = await createTestBooking(
+        BookingStatus.PENDING_PAYMENT,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${booking.id}/complete`)
+        .set("Authorization", `Bearer ${providerToken}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("must be CONFIRMED");
+    });
+
+    it("✓ Overdue job safely flags CONFIRMED booking for review (needsReview=true, overdueAt set)", async () => {
+      const { booking } = await createTestBooking(BookingStatus.CONFIRMED);
+
+      const result = await bookingService.flagOverdueBooking(booking.id);
+      expect(result.flagged).toBe(true);
+      expect(result.needsReview).toBe(true);
+
+      const flaggedBooking = await prisma.booking.findUnique({
+        where: { id: booking.id },
+      });
+      expect(flaggedBooking?.needsReview).toBe(true);
+      expect(flaggedBooking?.overdueAt).toBeDefined();
+      expect(flaggedBooking?.bookingStatus).toBe(BookingStatus.CONFIRMED); // Never forcibly set to NO_SHOW
+
+      // Audit log should be recorded
+      const audit = await prisma.auditLog.findFirst({
+        where: {
+          entityId: booking.id,
+          action: AuditAction.BOOKING_FLAGGED_OVERDUE,
+        },
+      });
+      expect(audit).toBeDefined();
+    });
+
+    it("✓ Overdue job skips booking if already completed or cancelled (idempotent)", async () => {
+      const { booking } = await createTestBooking(BookingStatus.COMPLETED);
+
+      const result = await bookingService.flagOverdueBooking(booking.id);
+      expect(result.skipped).toBe(true);
+      expect(result.reason).toBe("not_confirmed");
+    });
+
+    it("✓ Two concurrent workers flagging the same overdue booking execute safely once", async () => {
+      const { booking } = await createTestBooking(BookingStatus.CONFIRMED);
+
+      const [workerA, workerB] = await Promise.all([
+        bookingService.flagOverdueBooking(booking.id),
+        bookingService.flagOverdueBooking(booking.id),
+      ]);
+
+      const outcomes = [workerA, workerB];
+      const flaggedCount = outcomes.filter((o) => o.flagged === true).length;
+      const skippedCount = outcomes.filter((o) => o.skipped === true).length;
+
+      expect(flaggedCount).toBe(1);
+      expect(skippedCount).toBe(1);
+
+      const finalBooking = await prisma.booking.findUnique({
+        where: { id: booking.id },
+      });
+      expect(finalBooking?.needsReview).toBe(true);
     });
   });
 });

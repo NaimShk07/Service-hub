@@ -90,6 +90,8 @@ enum AuditAction {
   BOOKING_CREATED
   BOOKING_CONFIRMED
   BOOKING_CANCELLED
+  BOOKING_COMPLETED
+  BOOKING_FLAGGED_OVERDUE
   PROVIDER_VERIFIED
   PAYMENT_SUCCESS
   PAYMENT_FAILED
@@ -281,6 +283,9 @@ model Booking {
   customerNotes        String?
   cancellationReason   String?
   cancelledAt          DateTime?
+  completedAt          DateTime?
+  overdueAt            DateTime?
+  needsReview          Boolean         @default(false)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   payments             Payment[]
@@ -292,6 +297,7 @@ model Booking {
   @@index([providerServiceId])
   @@index([bookingDate])
   @@index([bookingStatus])
+  @@index([needsReview])
   @@map("bookings")
 }
 

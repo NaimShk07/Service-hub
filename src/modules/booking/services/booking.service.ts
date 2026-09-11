@@ -18,6 +18,7 @@ import {
   BookingStatus,
   PaymentGateway,
   PaymentStatus,
+  Role,
   UserStatus,
   VerificationStatus,
 } from "@prisma-client/enums";
@@ -343,6 +344,7 @@ export class BookingService {
 
     // Cancel pending reminders in Redis after DB transaction successfully commits
     await this.bookingQueueService.cancelPaymentExpiration(bookingId);
+    await this.bookingQueueService.cancelOverdueCheck(bookingId);
     await this.notificationQueueService.cancelBookingReminders(bookingId);
 
     return updatedBooking;
@@ -426,6 +428,152 @@ export class BookingService {
       );
 
       return { expired: true, bookingId };
+    });
+  }
+
+  /**
+   * Marks a booking as COMPLETED by the assigned provider or an admin.
+   * Cancels any pending overdue check job in BullMQ.
+   */
+  async completeBooking(bookingId: string, userId: string, role?: Role) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { provider: true },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID "${bookingId}" not found`);
+    }
+
+    const isProvider = booking.provider.userId === userId;
+    const isAdmin = role === Role.ADMIN;
+
+    if (!isProvider && !isAdmin) {
+      throw new ForbiddenException(
+        "Only the assigned provider or an admin can mark this booking as completed",
+      );
+    }
+
+    if (!canTransitionBooking(booking.bookingStatus, BookingStatus.COMPLETED)) {
+      throw new BadRequestException(
+        `Cannot complete booking in "${booking.bookingStatus}" status. Booking must be CONFIRMED.`,
+      );
+    }
+
+    const updatedBooking = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          bookingStatus: BookingStatus.COMPLETED,
+          completedAt: new Date(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          entityId: bookingId,
+          entityType: "Booking",
+          action: AuditAction.BOOKING_COMPLETED,
+          actorUserId: userId,
+          oldValue: { status: booking.bookingStatus },
+          newValue: {
+            status: BookingStatus.COMPLETED,
+            completedAt: updated.completedAt,
+          },
+        },
+      });
+
+      return updated;
+    });
+
+    // Cancel pending overdue check since provider marked it completed
+    await this.bookingQueueService.cancelOverdueCheck(bookingId);
+
+    return updatedBooking;
+  }
+
+  /**
+   * BullMQ worker handler for BOOKING_JOBS.PROCESS_NO_SHOW.
+   * Safe check: if still CONFIRMED after appointment end + grace period,
+   * flag as overdue / needs review for admin resolution instead of auto declaring NO_SHOW.
+   */
+  async flagOverdueBooking(bookingId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.findUnique({
+        where: { id: bookingId },
+      });
+
+      if (!booking) {
+        this.logger.warn(`Booking [${bookingId}] not found for overdue check.`);
+        return { skipped: true, reason: "booking_not_found" };
+      }
+
+      // Idempotency: only flag if still CONFIRMED and not already flagged
+      if (booking.bookingStatus !== BookingStatus.CONFIRMED) {
+        this.logger.log(
+          `Booking [${bookingId}] is in "${booking.bookingStatus}" status. Overdue flag skipped.`,
+        );
+        return {
+          skipped: true,
+          currentStatus: booking.bookingStatus,
+          reason: "not_confirmed",
+        };
+      }
+
+      if (booking.needsReview) {
+        this.logger.log(
+          `Booking [${bookingId}] is already flagged for review. Skipped.`,
+        );
+        return { skipped: true, reason: "already_flagged" };
+      }
+
+      // Concurrency guard: updateMany ensures exactly one worker flags it
+      const updateResult = await tx.booking.updateMany({
+        where: {
+          id: bookingId,
+          bookingStatus: BookingStatus.CONFIRMED,
+          needsReview: false,
+        },
+        data: {
+          needsReview: true,
+          overdueAt: new Date(),
+        },
+      });
+
+      if (updateResult.count === 0) {
+        this.logger.warn(
+          `Concurrent update guard: Booking [${bookingId}] was already updated by another worker.`,
+        );
+        return { skipped: true, reason: "already_transitioned" };
+      }
+
+      // Audit Log
+      await tx.auditLog.create({
+        data: {
+          entityId: bookingId,
+          entityType: "Booking",
+          action: AuditAction.BOOKING_FLAGGED_OVERDUE,
+          oldValue: {
+            status: booking.bookingStatus,
+            needsReview: false,
+          },
+          newValue: {
+            status: booking.bookingStatus,
+            needsReview: true,
+            overdueAt: new Date(),
+          },
+        },
+      });
+
+      this.logger.warn(
+        `Booking [${bookingId}] was not marked completed by provider. Flagged as OVERDUE (needsReview=true).`,
+      );
+
+      return {
+        flagged: true,
+        bookingId,
+        needsReview: true,
+      };
     });
   }
 }

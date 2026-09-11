@@ -2,7 +2,10 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { forwardRef, Inject, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 import { BOOKING_JOBS, QUEUE_BOOKING } from "../queues/queue.constants";
-import { ExpirePaymentJobPayload } from "../jobs/booking.jobs";
+import {
+  ExpirePaymentJobPayload,
+  ProcessNoShowJobPayload,
+} from "../jobs/booking.jobs";
 import { BookingService } from "@modules/booking/services/booking.service";
 
 @Processor(QUEUE_BOOKING, {
@@ -18,7 +21,9 @@ export class BookingProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ExpirePaymentJobPayload>): Promise<any> {
+  async process(
+    job: Job<ExpirePaymentJobPayload | ProcessNoShowJobPayload>,
+  ): Promise<any> {
     const startTime = Date.now();
     this.logger.log(
       `Processing booking job [${job.id}] "${job.name}" for booking ${job.data.bookingId}`,
@@ -28,6 +33,10 @@ export class BookingProcessor extends WorkerHost {
       let result: any;
       if (job.name === BOOKING_JOBS.EXPIRE_PAYMENT) {
         result = await this.bookingService.expireBooking(job.data.bookingId);
+      } else if (job.name === BOOKING_JOBS.PROCESS_NO_SHOW) {
+        result = await this.bookingService.flagOverdueBooking(
+          job.data.bookingId,
+        );
       } else {
         this.logger.warn(`[booking] unhandled job name: "${job.name}"`);
         result = { skipped: true, reason: "unknown_job" };

@@ -226,6 +226,9 @@ export class PaymentService {
 
     // Cancel payment expiration job since payment succeeded
     await this.bookingQueueService.cancelPaymentExpiration(payment.bookingId);
+    await this.bookingQueueService.scheduleBookingOverdueCheck(
+      payment.bookingId,
+    );
 
     await this.notificationQueueService.scheduleBookingLifecycleNotifications(
       payment.bookingId,
@@ -543,6 +546,9 @@ export class PaymentService {
 
       if (confirmedBookingId) {
         await this.bookingQueueService.cancelPaymentExpiration(
+          confirmedBookingId,
+        );
+        await this.bookingQueueService.scheduleBookingOverdueCheck(
           confirmedBookingId,
         );
         await this.notificationQueueService.scheduleBookingLifecycleNotifications(

@@ -21,6 +21,7 @@ import { CreateBookingDto } from "../dto/create-booking.dto";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { QueryBookingsDto } from "../dto/query-booking.dto";
 import { CancelBookingDto } from "../dto/cancel-booking.dto";
+import { Role } from "@prisma-client/enums";
 
 @ApiTags("Bookings")
 @Controller("bookings")
@@ -87,5 +88,33 @@ export class BookingController {
     @Body() dto: CancelBookingDto,
   ) {
     return await this.bookingService.cancelBookingAsCustomer(id, userId, dto);
+  }
+
+  @Post(":id/complete")
+  @ApiOperation({
+    summary: "Mark booking as completed (by assigned provider or admin)",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Booking marked as completed successfully",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid state transition (must be CONFIRMED)",
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Not authorized to complete this booking",
+  })
+  @ApiResponse({ status: 404, description: "Booking not found" })
+  async completeBooking(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { userId: string; role: Role },
+  ) {
+    return await this.bookingService.completeBooking(
+      id,
+      user.userId,
+      user.role,
+    );
   }
 }
