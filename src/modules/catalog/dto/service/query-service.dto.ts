@@ -1,4 +1,3 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsNumber,
@@ -10,24 +9,24 @@ import {
 } from "class-validator";
 
 export class QueryServiceDto {
-  @ApiPropertyOptional({ description: "Filter services by category ID" })
+  /** Filter services by category ID */
   @IsUUID()
   @IsOptional()
   categoryId?: string;
 
-  @ApiPropertyOptional({ description: "Search services by name" })
+  /** Search services by name */
   @IsString()
   @IsOptional()
   search?: string;
 
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  /** Page number */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
+  /** Items per page */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

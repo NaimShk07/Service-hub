@@ -1,4 +1,3 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -10,15 +9,14 @@ import {
 } from "class-validator";
 
 export class QueryCategoryDto {
-  // HTTP Query parameters arrive as strings
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  /** Page number */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
+  /** Items per page */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -26,15 +24,12 @@ export class QueryCategoryDto {
   @Max(100)
   limit?: number = 10;
 
-  @ApiPropertyOptional({ description: "Search categories by name" })
+  /** Search categories by name */
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({
-    default: false,
-    description: "Include inactive categories",
-  })
+  /** Include inactive categories */
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()

@@ -11,35 +11,22 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiConsumes,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from "@nestjs/swagger";
-
+import { ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
 import { ProviderService } from "../services/provider.service";
 import { CreateProviderDto } from "../dto/create-provider.dto";
 import { UpdateProviderDto } from "../dto/update-provider.dto";
-
-import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { UploadDocumentDto } from "../dto/upload-document.dto";
-import { RoleGuard } from "@modules/auth/guards/roles.guard";
-import { Roles } from "@common/decorators/roles.decorator";
 import { DocumentType, Role } from "@prisma-client/enums";
 import { ProviderServiceService } from "../services/provider-service.service";
 import { QueryPublicProviderServicesDto } from "../dto/query-public-provider-service.dto";
 import { ProviderAvailabilityService } from "../services/provider-availability.service";
 import { QuerySlotDto } from "../dto/query-slot.dto";
 import { QueryProviderSearchDto } from "../dto/query-provider-search.dto";
+import { Auth } from "@common/decorators/auth.decorator";
 
 @ApiTags("Providers")
 @Controller("")
@@ -50,21 +37,11 @@ export class ProviderController {
     private readonly providerAvailabilityService: ProviderAvailabilityService,
   ) {}
 
+  /**
+   * Create provider profile for current user
+   */
   @Post("me/provider")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: "Create provider profile for current user" })
-  @ApiResponse({
-    status: 201,
-    description: "Provider profile created successfully",
-  })
-  @ApiResponse({ status: 400, description: "Validation error" })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
-  @ApiResponse({
-    status: 409,
-    description:
-      "User is already registered as a provider or business name exists",
-  })
+  @Auth()
   async createProfile(
     @CurrentUser("userId") userId: string,
     @Body() dto: CreateProviderDto,
@@ -72,32 +49,20 @@ export class ProviderController {
     return await this.providerService.createProfile(userId, dto);
   }
 
+  /**
+   * Get own provider profile
+   */
   @Get("me/provider")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: "Get own provider profile" })
-  @ApiResponse({
-    status: 200,
-    description: "Provider profile retrieved successfully",
-  })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
-  @ApiResponse({ status: 404, description: "Provider profile not found" })
+  @Auth()
   async getOwnProfile(@CurrentUser("userId") userId: string) {
     return await this.providerService.getOwnProfile(userId);
   }
 
+  /**
+   * Update own provider profile
+   */
   @Patch("me/provider")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: "Update own provider profile" })
-  @ApiResponse({
-    status: 200,
-    description: "Provider profile updated successfully",
-  })
-  @ApiResponse({ status: 400, description: "Validation error" })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
-  @ApiResponse({ status: 404, description: "Provider profile not found" })
-  @ApiResponse({ status: 409, description: "Business name already exists" })
+  @Auth()
   async updateOwnProfile(
     @CurrentUser("userId") userId: string,
     @Body() dto: UpdateProviderDto,
@@ -105,23 +70,20 @@ export class ProviderController {
     return await this.providerService.updateOwnProfile(userId, dto);
   }
 
+  /**
+   * Get provider profile by ID
+   */
   @Get("provider/:id")
-  @ApiOperation({ summary: "Get provider profile by ID" })
-  @ApiResponse({
-    status: 200,
-    description: "Provider profile retrieved successfully",
-  })
-  @ApiResponse({ status: 400, description: "Invalid UUID format" })
-  @ApiResponse({ status: 404, description: "Provider profile not found" })
   async getProviderById(@Param("id", new ParseUUIDPipe()) id: string) {
     return await this.providerService.getProfileById(id);
   }
 
+  /**
+   * Upload provider document
+   */
   @Post("me/provider/documents")
-  @UseGuards(JwtAuthGuard)
+  @Auth()
   @UseInterceptors(FileInterceptor("file"))
-  @ApiBearerAuth()
-  @ApiOperation({ summary: "Upload provider document" })
   @ApiConsumes("multipart/form-data")
   @ApiBody({
     description: "Provider document upload",
@@ -138,16 +100,6 @@ export class ProviderController {
       required: ["documentType", "file"],
     },
   })
-  @ApiResponse({
-    status: 201,
-    description: "Provider document uploaded successfully",
-  })
-  @ApiResponse({
-    status: 400,
-    description: "Validation error or invalid file type/size",
-  })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
-  @ApiResponse({ status: 404, description: "Provider profile not found" })
   async uploadDocument(
     @CurrentUser("userId") userId: string,
     @Body() dto: UploadDocumentDto,
@@ -163,73 +115,38 @@ export class ProviderController {
   ) {
     return await this.providerService.uploadDocument(userId, dto, file);
   }
+
+  /**
+   * Get provider documents for admin
+   */
   @Get("admin/provider/:id/document")
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: "Get provider documents for admin" })
-  @ApiResponse({
-    status: 200,
-    description: "Provider documents retrieved successfully",
-  })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
-  @ApiResponse({ status: 403, description: "Forbidden. Admin access required" })
-  @ApiResponse({ status: 404, description: "Provider or document not found" })
+  @Auth(Role.ADMIN)
   async getDocumentForAdmin(
     @Param("id", new ParseUUIDPipe()) providerId: string,
   ) {
     return await this.providerService.getProviderDocumentsForAdmin(providerId);
   }
 
+  /**
+   * Get paginated summary list of verified providers
+   */
   @Get("providers")
-  @ApiOperation({ summary: "Get paginated summary list of verified providers" })
-  @ApiResponse({
-    status: 200,
-    description: "Paginated provider list retrieved successfully",
-  })
-  @ApiResponse({
-    status: 400,
-    description: "Invalid query parameter format or range constraints",
-  })
   async searchProvider(@Query() queryDto: QueryProviderSearchDto) {
     return this.providerService.searchPublicProviders(queryDto);
   }
 
+  /**
+   * Get public provider profile by ID
+   */
   @Get("providers/:id")
-  @ApiOperation({ summary: "Get public provider profile by ID" })
-  @ApiParam({
-    name: "id",
-    description: "Provider profile UUID",
-    type: String,
-    format: "uuid",
-  })
-  @ApiResponse({
-    status: 200,
-    description: "Public provider profile retrieved successfully",
-  })
-  @ApiResponse({ status: 400, description: "Invalid UUID format" })
-  @ApiResponse({ status: 404, description: "Provider profile not found" })
   async getPublicProviderById(@Param("id", new ParseUUIDPipe()) id: string) {
     return await this.providerService.getPublicProfileById(id);
   }
 
+  /**
+   * Get active services offered by provider
+   */
   @Get("providers/:id/services")
-  @ApiOperation({ summary: "Get active services offered by provider" })
-  @ApiParam({
-    name: "id",
-    description: "Provider profile UUID",
-    type: String,
-    format: "uuid",
-  })
-  @ApiResponse({
-    status: 200,
-    description: "Paginated list of active services offered by provider",
-  })
-  @ApiResponse({
-    status: 400,
-    description: "Invalid UUID format or query parameters",
-  })
-  @ApiResponse({ status: 404, description: "Provider profile not found" })
   async getPublicProviderServices(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Query() queryDto: QueryPublicProviderServicesDto,
@@ -240,29 +157,10 @@ export class ProviderController {
     );
   }
 
+  /**
+   * Get dynamically generated available booking slots for a provider service and date
+   */
   @Get("providers/:providerId/slots")
-  @ApiOperation({
-    summary:
-      "Get dynamically generated available booking slots for a provider service and date",
-  })
-  @ApiParam({
-    name: "providerId",
-    description: "Provider profile UUID",
-    type: String,
-    format: "uuid",
-  })
-  @ApiResponse({
-    status: 200,
-    description: "Dynamically generated time slots retrieved successfully",
-  })
-  @ApiResponse({
-    status: 400,
-    description: "Invalid parameters or date format",
-  })
-  @ApiResponse({
-    status: 404,
-    description: "Provider or service offering not found",
-  })
   async getAvailableSlots(
     @Param("providerId", new ParseUUIDPipe()) providerId: string,
     @Query() queryDto: QuerySlotDto,

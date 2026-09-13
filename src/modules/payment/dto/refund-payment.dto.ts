@@ -1,21 +1,13 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsNumber, IsOptional, IsPositive, IsString } from "class-validator";
 
 export class RefundPaymentDto {
-  @ApiPropertyOptional({
-    description:
-      "Amount to refund. If omitted, full payment amount is refunded.",
-    example: 899.99,
-  })
+  /** Amount to refund. If omitted, full payment amount is refunded. */
   @IsOptional()
   @IsNumber()
   @IsPositive()
   amount?: number;
 
-  @ApiPropertyOptional({
-    description: "Operational reason for the refund",
-    example: "Customer cancellation before appointment window",
-  })
+  /** Operational reason for the refund */
   @IsOptional()
   @IsString()
   reason?: string;

@@ -1,4 +1,3 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -18,86 +17,59 @@ export enum ProviderSearchSort {
 }
 
 export class QueryProviderSearchDto {
-  @ApiPropertyOptional({ description: "Page number", default: 1, minimum: 1 })
+  /** Page number */
   @Type(() => Number)
   @IsOptional()
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({
-    description: "Items per page",
-    default: 20,
-    minimum: 1,
-    maximum: 100,
-  })
+  /** Items per page */
   @Type(() => Number)
   @IsOptional()
   @Min(1)
   @Max(100)
   limit?: number = 20;
 
-  @ApiPropertyOptional({
-    description: "Filter by Category UUID",
-    example: "123e4567-e89b-12d3-a456-426614174000",
-    format: "uuid",
-  })
+  /** Filter by Category UUID */
   @IsOptional()
   @IsUUID()
   categoryId?: string;
 
-  @ApiPropertyOptional({
-    description: "Filter by Catalog Service UUID",
-    example: "123e4567-e89b-12d3-a456-426614174000",
-    format: "uuid",
-  })
+  /** Filter by Catalog Service UUID */
   @IsOptional()
   @IsUUID()
   serviceId?: string;
 
-  @ApiPropertyOptional({
-    description: "Filter by provider location city",
-    example: "Mumbai",
-  })
+  /** Filter by provider location city */
   @IsOptional()
   @IsString()
   city?: string;
 
-  @ApiPropertyOptional({
-    description: "Minimum offered service price in INR",
-    example: 100,
-    minimum: 0,
-  })
+  /** Minimum offered service price in INR */
   @IsOptional()
   @Type(() => Number)
   @Min(0)
   minPrice?: number;
 
-  @ApiPropertyOptional({
-    description: "Maximum offered service price in INR",
-    example: 1000,
-    minimum: 0,
-  })
+  /** Maximum offered service price in INR */
   @IsOptional()
   @Type(() => Number)
   @Min(0)
   maxPrice?: number;
 
-  @ApiPropertyOptional({
-    description: "Minimum average provider rating",
-    example: 4.0,
-    minimum: 0,
-    maximum: 5,
-  })
+  /** Minimum average provider rating */
   @IsOptional()
   @Type(() => Number)
   @Min(0)
   @Max(5)
   minRating?: number;
 
+  /** Search text by business name or description */
   @IsOptional()
   @IsString()
   search?: string;
 
+  /** Sort option for search results */
   @IsOptional()
   @IsEnum(ProviderSearchSort)
   sort?: ProviderSearchSort = ProviderSearchSort.RATING_DESC;
