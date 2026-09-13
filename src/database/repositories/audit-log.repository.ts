@@ -20,8 +20,9 @@ export class AuditLogRepository extends BaseRepository {
     super();
   }
 
-  async create(params: CreateAuditLogParams) {
-    return await this.prisma.auditLog.create({
+  async create(params: CreateAuditLogParams, tx?: Prisma.TransactionClient) {
+    const client = tx || this.prisma;
+    return await client.auditLog.create({
       data: {
         actorUserId: params.actorUserId,
         entityType: params.entityType,

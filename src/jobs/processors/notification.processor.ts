@@ -173,7 +173,7 @@ export class NotificationProcessor extends WorkerHost {
 
       const notificationId = job.data.notificationId;
       if (notificationId) {
-        await this.prisma.notification.update({
+        await this.prisma.notification.updateMany({
           where: { id: notificationId },
           data: {
             status: NotificationStatus.FAILED,

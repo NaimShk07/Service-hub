@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
   Inject,
   Injectable,
   Logger,
@@ -31,6 +32,9 @@ import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 import { NotificationQueueService } from "@jobs/queues/notification.queue";
 import { BookingQueueService } from "@jobs/queues/booking.queue";
 
+import { AuditLogRepository } from "@database/repositories/audit-log.repository";
+import { PaymentRepository } from "@modules/payment/repositories/payment.repository";
+
 @Injectable()
 export class BookingService {
   private readonly logger = new Logger(BookingService.name);
@@ -39,6 +43,9 @@ export class BookingService {
     private readonly bookingRepository: BookingRepository,
     private readonly providerServiceRepository: ProviderServiceRepository,
     private readonly providerAvailabilityRepository: ProviderAvailabilityRepository,
+    @Inject(forwardRef(() => PaymentRepository))
+    private readonly paymentRepository: PaymentRepository,
+    private readonly auditLogRepository: AuditLogRepository,
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
     private readonly notificationQueueService: NotificationQueueService,
@@ -164,8 +171,8 @@ export class BookingService {
         );
 
         // B. Insert Initial Payment record
-        const payment = await tx.payment.create({
-          data: {
+        const payment = await this.paymentRepository.create(
+          {
             bookingId: booking.id,
             gateway: PaymentGateway.RAZORPAY,
             gatewayOrderId: gatewayOrder.gatewayOrderId,
@@ -173,11 +180,12 @@ export class BookingService {
             currency: providerService.currency || "INR",
             status: PaymentStatus.CREATED,
           },
-        });
+          tx,
+        );
 
         // C. Insert Audit Log
-        await tx.auditLog.create({
-          data: {
+        await this.auditLogRepository.create(
+          {
             actorUserId: customerId,
             entityType: "Booking",
             entityId: booking.id,
@@ -190,7 +198,8 @@ export class BookingService {
               gatewayOrderId: gatewayOrder.gatewayOrderId,
             },
           },
-        });
+          tx,
+        );
 
         this.logger.log(
           `Successfully created booking "${booking.id}" with payment order "${gatewayOrder.gatewayOrderId}"`,
@@ -320,8 +329,8 @@ export class BookingService {
         tx,
       );
 
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           actorUserId: customerId,
           entityType: "Booking",
           entityId: bookingId,
@@ -333,7 +342,8 @@ export class BookingService {
             cancelledAt: new Date().toISOString(),
           },
         },
-      });
+        tx,
+      );
 
       this.logger.log(
         `Booking ${bookingId} cancelled by customer ${customerId}`,
@@ -356,10 +366,7 @@ export class BookingService {
    */
   async expireBooking(bookingId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const booking = await tx.booking.findUnique({
-        where: { id: bookingId },
-        include: { payments: true },
-      });
+      const booking = await this.bookingRepository.findById(bookingId, tx);
 
       if (!booking) {
         this.logger.warn(`Booking [${bookingId}] not found for expiration.`);
@@ -379,15 +386,18 @@ export class BookingService {
       }
 
       // Concurrency guard: updateMany ensures exactly one worker performs the transition
-      const updateResult = await tx.booking.updateMany({
-        where: {
-          id: bookingId,
-          bookingStatus: BookingStatus.PENDING_PAYMENT,
+      const updateResult = await this.bookingRepository.updateMany(
+        {
+          where: {
+            id: bookingId,
+            bookingStatus: BookingStatus.PENDING_PAYMENT,
+          },
+          data: {
+            bookingStatus: BookingStatus.EXPIRED,
+          },
         },
-        data: {
-          bookingStatus: BookingStatus.EXPIRED,
-        },
-      });
+        tx,
+      );
 
       if (updateResult.count === 0) {
         this.logger.warn(
@@ -397,19 +407,22 @@ export class BookingService {
       }
 
       // Mark lingering unpaid payments as FAILED
-      await tx.payment.updateMany({
-        where: {
-          bookingId,
-          status: { in: [PaymentStatus.CREATED, PaymentStatus.PENDING] },
+      await this.paymentRepository.updateMany(
+        {
+          where: {
+            bookingId,
+            status: { in: [PaymentStatus.CREATED, PaymentStatus.PENDING] },
+          },
+          data: {
+            status: PaymentStatus.FAILED,
+          },
         },
-        data: {
-          status: PaymentStatus.FAILED,
-        },
-      });
+        tx,
+      );
 
       // Audit Log
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           actorUserId: booking.customerId,
           entityType: "Booking",
           entityId: bookingId,
@@ -421,7 +434,8 @@ export class BookingService {
             expiredAt: new Date().toISOString(),
           },
         },
-      });
+        tx,
+      );
 
       this.logger.log(
         `✅ Booking [${bookingId}] expired and time slot released.`,
@@ -436,10 +450,7 @@ export class BookingService {
    * Cancels any pending overdue check job in BullMQ.
    */
   async completeBooking(bookingId: string, userId: string, role?: Role) {
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: { provider: true },
-    });
+    const booking = await this.bookingRepository.findById(bookingId);
 
     if (!booking) {
       throw new NotFoundException(`Booking with ID "${bookingId}" not found`);
@@ -461,16 +472,17 @@ export class BookingService {
     }
 
     const updatedBooking = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.booking.update({
-        where: { id: bookingId },
-        data: {
+      const updated = await this.bookingRepository.update(
+        bookingId,
+        {
           bookingStatus: BookingStatus.COMPLETED,
           completedAt: new Date(),
         },
-      });
+        tx,
+      );
 
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           entityId: bookingId,
           entityType: "Booking",
           action: AuditAction.BOOKING_COMPLETED,
@@ -481,7 +493,8 @@ export class BookingService {
             completedAt: updated.completedAt,
           },
         },
-      });
+        tx,
+      );
 
       return updated;
     });
@@ -499,9 +512,7 @@ export class BookingService {
    */
   async flagOverdueBooking(bookingId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const booking = await tx.booking.findUnique({
-        where: { id: bookingId },
-      });
+      const booking = await this.bookingRepository.findById(bookingId, tx);
 
       if (!booking) {
         this.logger.warn(`Booking [${bookingId}] not found for overdue check.`);
@@ -528,17 +539,20 @@ export class BookingService {
       }
 
       // Concurrency guard: updateMany ensures exactly one worker flags it
-      const updateResult = await tx.booking.updateMany({
-        where: {
-          id: bookingId,
-          bookingStatus: BookingStatus.CONFIRMED,
-          needsReview: false,
+      const updateResult = await this.bookingRepository.updateMany(
+        {
+          where: {
+            id: bookingId,
+            bookingStatus: BookingStatus.CONFIRMED,
+            needsReview: false,
+          },
+          data: {
+            needsReview: true,
+            overdueAt: new Date(),
+          },
         },
-        data: {
-          needsReview: true,
-          overdueAt: new Date(),
-        },
-      });
+        tx,
+      );
 
       if (updateResult.count === 0) {
         this.logger.warn(
@@ -548,8 +562,8 @@ export class BookingService {
       }
 
       // Audit Log
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           entityId: bookingId,
           entityType: "Booking",
           action: AuditAction.BOOKING_FLAGGED_OVERDUE,
@@ -563,7 +577,8 @@ export class BookingService {
             overdueAt: new Date(),
           },
         },
-      });
+        tx,
+      );
 
       this.logger.warn(
         `Booking [${bookingId}] was not marked completed by provider. Flagged as OVERDUE (needsReview=true).`,

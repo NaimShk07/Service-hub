@@ -26,6 +26,8 @@ import { toSmallestCurrencyUnit } from "@common/utils/currency.util";
 import { NotificationQueueService } from "@jobs/queues/notification.queue";
 import { BookingQueueService } from "@jobs/queues/booking.queue";
 
+import { AuditLogRepository } from "@database/repositories/audit-log.repository";
+
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
@@ -33,6 +35,7 @@ export class PaymentService {
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly bookingRepository: BookingRepository,
+    private readonly auditLogRepository: AuditLogRepository,
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: IPaymentGateway,
     private readonly prisma: PrismaService,
     private readonly notificationQueueService: NotificationQueueService,
@@ -186,8 +189,8 @@ export class PaymentService {
       );
 
       // Audit Logs
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           actorUserId: customerId,
           entityType: "Payment",
           entityId: payment.id,
@@ -198,10 +201,11 @@ export class PaymentService {
             gatewayPaymentId: dto.razorpayPaymentId,
           },
         },
-      });
+        tx,
+      );
 
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           actorUserId: customerId,
           entityType: "Booking",
           entityId: payment.bookingId,
@@ -209,7 +213,8 @@ export class PaymentService {
           oldValue: { status: payment.booking.bookingStatus },
           newValue: { status: BookingStatus.CONFIRMED },
         },
-      });
+        tx,
+      );
       this.logger.log(
         `Payment "${payment.id}" verified -> Booking "${payment.bookingId}" is CONFIRMED`,
       );
@@ -420,8 +425,8 @@ export class PaymentService {
               tx,
             );
 
-            await tx.auditLog.create({
-              data: {
+            await this.auditLogRepository.create(
+              {
                 actorUserId: payment.booking.customerId,
                 entityType: "Payment",
                 entityId: payment.id,
@@ -429,7 +434,8 @@ export class PaymentService {
                 oldValue: { status: payment.status },
                 newValue: { status: PaymentStatus.SUCCESS, event: eventName },
               },
-            });
+              tx,
+            );
 
             // ⚠️ RACE GUARD: Check if booking is still PENDING_PAYMENT
             if (
@@ -442,8 +448,8 @@ export class PaymentService {
                 tx,
               );
 
-              await tx.auditLog.create({
-                data: {
+              await this.auditLogRepository.create(
+                {
                   actorUserId: payment.booking.customerId,
                   entityType: "Booking",
                   entityId: payment.bookingId,
@@ -454,7 +460,8 @@ export class PaymentService {
                     source: "webhook",
                   },
                 },
-              });
+                tx,
+              );
               this.logger.log(
                 `Booking "${payment.bookingId}" CONFIRMED via webhook`,
               );
@@ -465,8 +472,8 @@ export class PaymentService {
               this.logger.error(
                 `CRITICAL: Payment ${payment.id} captured for booking ${payment.bookingId}, but booking status is "${payment.booking.bookingStatus}". Flagged for refund.`,
               );
-              await tx.auditLog.create({
-                data: {
+              await this.auditLogRepository.create(
+                {
                   actorUserId: payment.booking.customerId,
                   entityType: "Booking",
                   entityId: payment.bookingId,
@@ -478,7 +485,8 @@ export class PaymentService {
                     reason: `Payment succeeded after booking was ${payment.booking.bookingStatus}`,
                   },
                 },
-              });
+                tx,
+              );
             }
             break;
           }
@@ -491,8 +499,8 @@ export class PaymentService {
                 { gatewayPaymentId },
                 tx,
               );
-              await tx.auditLog.create({
-                data: {
+              await this.auditLogRepository.create(
+                {
                   actorUserId: payment.booking.customerId,
                   entityType: "Payment",
                   entityId: payment.id,
@@ -502,7 +510,8 @@ export class PaymentService {
                     error: paymentEntity?.error_description,
                   },
                 },
-              });
+                tx,
+              );
 
               // 💡 Keep Booking in PENDING_PAYMENT so customer can retry payment
               this.logger.log(
@@ -625,8 +634,8 @@ export class PaymentService {
       }
 
       // 3. Audit Log
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepository.create(
+        {
           actorUserId: adminUserId,
           entityType: "Payment",
           entityId: payment.id,
@@ -638,7 +647,8 @@ export class PaymentService {
             reason: dto.reason || "Admin refund",
           },
         },
-      });
+        tx,
+      );
 
       return {
         success: true,

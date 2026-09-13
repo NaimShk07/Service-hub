@@ -19,6 +19,20 @@ export class PaymentRepository extends BaseRepository {
     });
   }
 
+  async updateMany(
+    params: {
+      where: Prisma.PaymentWhereInput;
+      data: Prisma.PaymentUpdateManyMutationInput;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx || this.prisma;
+    return await client.payment.updateMany({
+      where: params.where,
+      data: params.data,
+    });
+  }
+
   async findById(id: string) {
     return this.prisma.payment.findUnique({
       where: { id },

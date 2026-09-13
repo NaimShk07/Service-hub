@@ -161,7 +161,7 @@ describe("Day 7: Razorpay Webhook Concurrency, Tamper Guards & Refunds (e2e)", (
   afterAll(async () => {
     await prisma.$disconnect();
     await app.close();
-  });
+  }, 15000);
 
   describe("Group 1: Webhook Signature & Security Integrity", () => {
     it("✓ Rejects webhook when HMAC signature is invalid", async () => {

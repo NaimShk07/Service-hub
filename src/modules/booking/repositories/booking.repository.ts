@@ -20,8 +20,9 @@ export class BookingRepository extends BaseRepository {
     });
   }
 
-  async findById(id: string) {
-    return await this.prisma.booking.findUnique({
+  async findById(id: string, tx?: Prisma.TransactionClient) {
+    const client = tx || this.prisma;
+    return await client.booking.findUnique({
       where: {
         id,
       },
@@ -38,7 +39,34 @@ export class BookingRepository extends BaseRepository {
           },
         },
         providerService: true,
+        payments: true,
       },
+    });
+  }
+
+  async update(
+    id: string,
+    data: Prisma.BookingUpdateInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx || this.prisma;
+    return await client.booking.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async updateMany(
+    params: {
+      where: Prisma.BookingWhereInput;
+      data: Prisma.BookingUpdateManyMutationInput;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx || this.prisma;
+    return await client.booking.updateMany({
+      where: params.where,
+      data: params.data,
     });
   }
 
