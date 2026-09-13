@@ -1,7 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional, ApiProperty } from "@nestjs/swagger";
 import {
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -11,13 +10,14 @@ import {
 } from "class-validator";
 
 export class CreateReviewDto {
-  @ApiProperty({
-    description: "UUID of the completed booking being reviewed",
+  @ApiPropertyOptional({
+    description:
+      "UUID of the completed booking (optional if passed via URL path)",
     example: "a81bc81b-dead-4e5d-abff-90865d1e13b1",
   })
   @IsUUID()
-  @IsNotEmpty()
-  bookingId: string;
+  @IsOptional()
+  bookingId?: string;
 
   @ApiProperty({
     description: "Rating score between 1 and 5",
@@ -31,8 +31,8 @@ export class CreateReviewDto {
   rating: number;
 
   @ApiPropertyOptional({
-    description: "Optional customer feedback / comment",
-    example: "Excellent plumbing work! Arrived on time and solved the leakage.",
+    description: "Optional customer feedback / comment (max 1000 characters)",
+    example: "Very professional and punctual.",
     maxLength: 1000,
   })
   @IsString()

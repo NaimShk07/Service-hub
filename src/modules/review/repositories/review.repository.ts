@@ -2,7 +2,7 @@ import { PrismaService } from "@database/prisma/prisma.service";
 import { BaseRepository } from "@database/repositories/base.repository";
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma-client/client";
-import { QueryReviewDto } from "../dto/query-review.dto";
+import { QueryReviewDto, ReviewSortOption } from "../dto/query-review.dto";
 
 @Injectable()
 export class ReviewRepository extends BaseRepository {
@@ -51,7 +51,7 @@ export class ReviewRepository extends BaseRepository {
   }
 
   async findByProviderId(providerId: string, queryDto: QueryReviewDto) {
-    const { page = 1, limit = 10, rating } = queryDto;
+    const { page = 1, limit = 10, rating, sort } = queryDto;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ReviewWhereInput = {
@@ -59,12 +59,25 @@ export class ReviewRepository extends BaseRepository {
       ...(rating ? { rating } : {}),
     };
 
+    let orderBy: Prisma.ReviewOrderByWithRelationInput = { createdAt: "desc" };
+    if (sort === ReviewSortOption.OLDEST) {
+      orderBy = { createdAt: "asc" };
+    } else if (sort === ReviewSortOption.HIGHEST) {
+      orderBy = { rating: "desc" };
+    } else if (sort === ReviewSortOption.LOWEST) {
+      orderBy = { rating: "asc" };
+    }
+
     const query = this.prisma.review.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
-      include: {
+      orderBy,
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
         customer: {
           select: {
             id: true,

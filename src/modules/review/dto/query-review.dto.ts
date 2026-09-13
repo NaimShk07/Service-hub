@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, Max, Min } from "class-validator";
+import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
+
+export enum ReviewSortOption {
+  NEWEST = "newest",
+  OLDEST = "oldest",
+  HIGHEST = "highest",
+  LOWEST = "lowest",
+}
 
 export class QueryReviewDto {
   @ApiPropertyOptional({ description: "Page number", default: 1 })
@@ -29,4 +36,13 @@ export class QueryReviewDto {
   @Max(5)
   @IsOptional()
   rating?: number;
+
+  @ApiPropertyOptional({
+    enum: ReviewSortOption,
+    description: "Sorting option",
+    default: ReviewSortOption.NEWEST,
+  })
+  @IsEnum(ReviewSortOption)
+  @IsOptional()
+  sort?: ReviewSortOption = ReviewSortOption.NEWEST;
 }

@@ -391,6 +391,41 @@ describe("Review Domain (e2e)", () => {
       expect(body.rating).toBe(review?.rating);
     });
 
+    it("✓ POST /api/v1/bookings/:bookingId/review creates review via path param (Day 2 shape)", async () => {
+      const booking = await createBooking(
+        testCustomer.id,
+        BookingStatus.COMPLETED,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${booking.id}/review`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          rating: 4,
+          comment: "Created via Day 2 path endpoint",
+        });
+
+      expect(res.status).toBe(201);
+      const body = res.body.data || res.body;
+      expect(body.rating).toBe(4);
+      expect(body.bookingId).toBe(booking.id);
+    });
+
+    it("✓ GET /api/v1/providers/:providerId/reviews returns items and supports sorting (Day 3 shape)", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/providers/${testProvider.id}/reviews`)
+        .query({ page: 1, limit: 10, sort: "highest" });
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.items)).toBe(true);
+      expect(res.body.items.length).toBeGreaterThanOrEqual(2);
+      expect(res.body.items[0].rating).toBeGreaterThanOrEqual(
+        res.body.items[1].rating,
+      );
+      expect(res.body.meta).toBeDefined();
+      expect(res.body.meta.page).toBe(1);
+    });
+
     it("✓ GET /api/v1/reviews/booking/:bookingId returns 404 for unreviewed booking", async () => {
       const unreviewedBooking = await createBooking(
         testCustomer.id,

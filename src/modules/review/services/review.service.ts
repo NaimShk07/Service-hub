@@ -27,12 +27,23 @@ export class ReviewService {
    * Submits a trustworthy review for a completed booking.
    * Atomically recalculates provider's averageRating and totalReviews.
    */
-  async createReview(customerId: string, dto: CreateReviewDto) {
+  async createReview(
+    customerId: string,
+    dto: CreateReviewDto,
+    pathBookingId?: string,
+  ) {
+    const bookingId = pathBookingId || dto.bookingId;
+    if (!bookingId) {
+      throw new BadRequestException(
+        "bookingId must be provided in URL or body",
+      );
+    }
+
     // 1. Fetch booking via BookingRepository
-    const booking = await this.bookingRepository.findById(dto.bookingId);
+    const booking = await this.bookingRepository.findById(bookingId);
 
     if (!booking) {
-      throw new NotFoundException(`Booking "${dto.bookingId}" not found`);
+      throw new NotFoundException(`Booking "${bookingId}" not found`);
     }
 
     // 2. Authorization Invariant: Only the customer who booked can leave a review
@@ -50,9 +61,8 @@ export class ReviewService {
     }
 
     // 4. Exact-once Invariant: One review per booking
-    const existingReview = await this.reviewRepository.findByBookingId(
-      dto.bookingId,
-    );
+    const existingReview =
+      await this.reviewRepository.findByBookingId(bookingId);
     if (existingReview) {
       throw new ConflictException(
         "A review has already been submitted for this booking",
@@ -64,7 +74,7 @@ export class ReviewService {
       // Create Review record (enforcing derived customerId & providerId from booking)
       const review = await this.reviewRepository.create(
         {
-          bookingId: dto.bookingId,
+          bookingId,
           customerId,
           providerId: booking.providerId,
           rating: dto.rating,
@@ -90,7 +100,7 @@ export class ReviewService {
       );
 
       this.logger.log(
-        `Review created for booking ${dto.bookingId}. Provider ${booking.providerId} updated: avgRating=${averageRating.toFixed(2)}, totalReviews=${totalReviews}`,
+        `Review created for booking ${bookingId}. Provider ${booking.providerId} updated: avgRating=${averageRating.toFixed(2)}, totalReviews=${totalReviews}`,
       );
 
       return {
@@ -104,7 +114,15 @@ export class ReviewService {
   }
 
   async getProviderReviews(providerId: string, query: QueryReviewDto) {
-    return await this.reviewRepository.findByProviderId(providerId, query);
+    const result = await this.reviewRepository.findByProviderId(
+      providerId,
+      query,
+    );
+    return {
+      items: result.data,
+      data: result.data,
+      meta: result.meta,
+    };
   }
 
   async getBookingReview(bookingId: string) {
