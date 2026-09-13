@@ -19,6 +19,7 @@ import { BookingModule } from "@modules/booking/booking.module";
 import { PaymentModule } from "@modules/payment/payment.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { NotificationModule } from "@modules/notification/notification.module";
+import { ReviewModule } from "@modules/review/review.module";
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { NotificationModule } from "@modules/notification/notification.module";
     PaymentModule,
     JobsModule,
     NotificationModule,
+    ReviewModule,
   ],
   controllers: [AppController],
   providers: [
