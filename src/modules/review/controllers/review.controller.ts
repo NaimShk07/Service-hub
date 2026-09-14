@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from "@nestjs/common";
@@ -14,6 +15,7 @@ import { QueryReviewDto } from "../dto/query-review.dto";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Auth } from "@common/decorators/auth.decorator";
 import { Role } from "@prisma-client/enums";
+import { UpdateReviewDto } from "../dto/update-review.dto";
 
 @ApiTags("Reviews")
 @Controller()
@@ -43,6 +45,19 @@ export class ReviewController {
     @Body() dto: CreateReviewDto,
   ) {
     return await this.reviewService.createReview(customerId, dto);
+  }
+
+  /**
+   * Update customer's review for a booking
+   */
+  @Patch("reviews/:id")
+  @Auth(Role.USER)
+  async updateReview(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser("userId") customerId: string,
+    @Body() dto: UpdateReviewDto,
+  ) {
+    return await this.reviewService.updateReview(customerId, id, dto);
   }
 
   /**

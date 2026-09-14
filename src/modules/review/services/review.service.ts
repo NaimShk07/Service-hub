@@ -12,6 +12,7 @@ import { BookingRepository } from "@modules/booking/repositories/booking.reposit
 import { CreateReviewDto } from "../dto/create-review.dto";
 import { QueryReviewDto } from "../dto/query-review.dto";
 import { BookingStatus } from "@prisma-client/enums";
+import { UpdateReviewDto } from "../dto/update-review.dto";
 
 @Injectable()
 export class ReviewService {
@@ -123,6 +124,84 @@ export class ReviewService {
       data: result.data,
       meta: result.meta,
     };
+  }
+
+  /**
+   * Updates an existing review submitted by the customer.
+   * If rating changes, recalculates provider averageRating atomically in a transaction.
+   */
+  async updateReview(
+    customerId: string,
+    reviewId: string,
+    dto: UpdateReviewDto,
+  ) {
+    // 1. Verify review exists
+    const review = await this.reviewRepository.findById(reviewId);
+    if (!review) {
+      throw new NotFoundException("Review not found");
+    }
+
+    // 2. Ownership verification: Customer must own this review
+    if (review.customerId !== customerId) {
+      throw new ForbiddenException(
+        "You are not authorized to update this review",
+      );
+    }
+
+    const isRatingChanged =
+      dto.rating !== undefined && dto.rating !== review.rating;
+
+    // 3. If rating changed, update review + recalculate provider metrics in an ACID transaction
+    if (isRatingChanged) {
+      return await this.prisma.$transaction(async (tx) => {
+        const updated = await this.reviewRepository.update(
+          reviewId,
+          {
+            rating: dto.rating,
+            comment:
+              dto.comment !== undefined
+                ? dto.comment?.trim() || null
+                : undefined,
+          },
+          tx,
+        );
+
+        // Recalculate provider metrics
+        const agg = await this.reviewRepository.aggregateProviderRating(
+          review.providerId,
+          tx,
+        );
+
+        const averageRating = agg._avg.rating ?? 0;
+        const totalReviews = agg._count.rating ?? 0;
+
+        await this.reviewRepository.updateProviderRatingStats(
+          review.providerId,
+          averageRating,
+          totalReviews,
+          tx,
+        );
+
+        this.logger.log(
+          `Review ${reviewId} updated with new rating ${dto.rating}. Provider ${review.providerId} recalculated: avg=${averageRating.toFixed(2)}, total=${totalReviews}`,
+        );
+
+        return {
+          ...updated,
+          providerMetrics: {
+            averageRating: parseFloat(averageRating.toFixed(2)),
+            totalReviews,
+          },
+        };
+      });
+    }
+
+    // 4. If only comment was updated (rating untouched)
+    const updated = await this.reviewRepository.update(reviewId, {
+      comment:
+        dto.comment !== undefined ? dto.comment?.trim() || null : undefined,
+    });
+    return updated;
   }
 
   async getBookingReview(bookingId: string) {

@@ -20,6 +20,18 @@ export class ReviewRepository extends BaseRepository {
     });
   }
 
+  async update(
+    id: string,
+    data: Prisma.ReviewUpdateInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx || this.prisma;
+    return await client.review.update({
+      where: { id },
+      data,
+    });
+  }
+
   async findById(id: string) {
     return await this.prisma.review.findUnique({
       where: { id },

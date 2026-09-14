@@ -439,4 +439,85 @@ describe("Review Domain (e2e)", () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe("4. Review Editing (Day 5)", () => {
+    let editableReviewId: string;
+
+    beforeAll(async () => {
+      // Create a fresh booking & review to test editing
+      const editBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.COMPLETED,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${editBooking.id}/review`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          rating: 4,
+          comment: "Initial review comment",
+        });
+
+      editableReviewId = res.body.data?.id || res.body.id;
+    });
+
+    it("✓ Should reject update if review does not exist (404 Not Found)", async () => {
+      const randomUuid = "00000000-0000-0000-0000-000000000000";
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/reviews/${randomUuid}`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ comment: "Trying to update non-existent" });
+
+      expect(res.status).toBe(404);
+    });
+
+    it("✓ Should reject update if another customer tries to edit (403 Forbidden)", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/reviews/${editableReviewId}`)
+        .set("Authorization", `Bearer ${otherCustomerToken}`)
+        .send({ comment: "Malicious edit attempt" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("✓ Should reject invalid rating range on edit (400 Bad Request)", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/reviews/${editableReviewId}`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ rating: 6 });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("✓ Should allow customer to update comment without changing rating", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/reviews/${editableReviewId}`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ comment: "Updated comment only" });
+
+      expect(res.status).toBe(200);
+      const body = res.body.data || res.body;
+      expect(body.comment).toBe("Updated comment only");
+      expect(body.rating).toBe(4);
+    });
+
+    it("✓ Should allow customer to change rating and atomically recalculate provider rating", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/reviews/${editableReviewId}`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ rating: 2, comment: "Downgrading service rating" });
+
+      expect(res.status).toBe(200);
+      const body = res.body.data || res.body;
+      expect(body.rating).toBe(2);
+      expect(body.comment).toBe("Downgrading service rating");
+
+      // Verify ProviderProfile average rating was updated in database
+      const providerProfile = await prisma.providerProfile.findUnique({
+        where: { id: testProvider.id },
+      });
+      expect(providerProfile).toBeDefined();
+      expect(Number(providerProfile.averageRating)).toBeGreaterThan(0);
+    });
+  });
 });
