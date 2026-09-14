@@ -367,6 +367,7 @@ model Notification {
   body          String
   scheduledFor  DateTime
   sentAt        DateTime?
+  readAt        DateTime? // User read state (null = unread)
   failedAt      DateTime?
   failureReason String?
   attemptCount  Int                 @default(0)
@@ -376,6 +377,7 @@ model Notification {
   @@index([bookingId])
   @@index([status])
   @@index([scheduledFor])
+  @@index([userId, readAt])
   @@map("notifications")
 }
 

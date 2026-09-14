@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "@database/prisma/prisma.service";
 import { BaseRepository } from "@database/repositories/base.repository";
-import { Prisma } from "@prisma-client/client";
+import { Notification, Prisma } from "@prisma-client/client";
 
 @Injectable()
 export class NotificationRepository extends BaseRepository {
@@ -23,6 +23,7 @@ export class NotificationRepository extends BaseRepository {
         body: true,
         scheduledFor: true,
         sentAt: true,
+        readAt: true,
         createdAt: true,
       },
     });
@@ -53,6 +54,30 @@ export class NotificationRepository extends BaseRepository {
     return await client.notification.update({
       where: { id },
       data,
+    });
+  }
+
+  async countUnread(userId: string): Promise<number> {
+    return await this.prisma.notification.count({
+      where: { userId, readAt: null },
+    });
+  }
+
+  async markAsRead(id: string, userId: string): Promise<Notification> {
+    return await this.prisma.notification.update({
+      where: { id, userId, readAt: null },
+      data: {
+        readAt: new Date(),
+      },
+    });
+  }
+
+  async markAllAsRead(userId: string): Promise<{ count: number }> {
+    return await this.prisma.notification.updateMany({
+      where: { userId, readAt: null },
+      data: {
+        readAt: new Date(),
+      },
     });
   }
 }
