@@ -4,6 +4,9 @@ import request from "supertest";
 import { JwtService } from "@nestjs/jwt";
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "@database/prisma/prisma.service";
+import { RedisService } from "@common/cache/redis.service";
+import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter";
+import { PrismaClientExceptionFilter } from "../src/common/filters/prisma-client-exception.filter";
 import {
   BookingStatus,
   Role,
@@ -17,6 +20,7 @@ describe("Review Domain (e2e)", () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let jwtService: JwtService;
+  let redisService: RedisService;
 
   let testCustomer: any;
   let customerToken: string;
@@ -40,10 +44,15 @@ describe("Review Domain (e2e)", () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
+    app.useGlobalFilters(
+      new HttpExceptionFilter(),
+      new PrismaClientExceptionFilter(),
+    );
     await app.init();
 
     prisma = app.get(PrismaService);
     jwtService = app.get(JwtService);
+    redisService = app.get(RedisService);
 
     // 1. Seed primary test customer
     testCustomer = await prisma.user.create({
@@ -263,6 +272,62 @@ describe("Review Domain (e2e)", () => {
           bookingId: completedBooking.id,
           rating: 6, // Invalid rating
           comment: "Too high",
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("✓ Should reject review if booking is PENDING_PAYMENT (400 Bad Request)", async () => {
+      const pendingBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.PENDING_PAYMENT,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post("/api/v1/reviews")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          bookingId: pendingBooking.id,
+          rating: 5,
+          comment: "Trying to review before paying",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("must be COMPLETED");
+    });
+
+    it("✓ Should reject review if booking is CANCELLED (400 Bad Request)", async () => {
+      const cancelledBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.CANCELLED,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post("/api/v1/reviews")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          bookingId: cancelledBooking.id,
+          rating: 1,
+          comment: "Trying to review cancelled booking",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("must be COMPLETED");
+    });
+
+    it("✓ Should reject review if comment exceeds 1000 characters (400 Bad Request)", async () => {
+      const completedBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.COMPLETED,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post("/api/v1/reviews")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          bookingId: completedBooking.id,
+          rating: 5,
+          comment: "a".repeat(1001),
         });
 
       expect(res.status).toBe(400);
@@ -517,7 +582,119 @@ describe("Review Domain (e2e)", () => {
         where: { id: testProvider.id },
       });
       expect(providerProfile).toBeDefined();
-      expect(Number(providerProfile.averageRating)).toBeGreaterThan(0);
+      expect(Number(providerProfile?.averageRating)).toBeGreaterThan(0);
+    });
+  });
+
+  // =========================================================================
+  describe("5. Race Condition & Concurrency (Database Invariant)", () => {
+    it("✓ Concurrent review submissions for the same booking: exactly one succeeds and one receives 409 Conflict", async () => {
+      const raceBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.COMPLETED,
+      );
+
+      // Fire 2 simultaneous requests to review the exact same booking
+      const [resA, resB] = await Promise.all([
+        request(app.getHttpServer())
+          .post(`/api/v1/bookings/${raceBooking.id}/review`)
+          .set("Authorization", `Bearer ${customerToken}`)
+          .send({
+            rating: 5,
+            comment: "Concurrent review A",
+          }),
+        request(app.getHttpServer())
+          .post(`/api/v1/bookings/${raceBooking.id}/review`)
+          .set("Authorization", `Bearer ${customerToken}`)
+          .send({
+            rating: 4,
+            comment: "Concurrent review B",
+          }),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort();
+      // One request MUST succeed (201), the other MUST fail with 409 Conflict
+      expect(statuses).toEqual([201, 409]);
+
+      // Verify the database invariant: UNIQUE(booking_id) enforced at DB level
+      const reviewCount = await prisma.review.count({
+        where: { bookingId: raceBooking.id },
+      });
+      expect(reviewCount).toBe(1);
+    });
+  });
+
+  // =========================================================================
+  describe("6. Provider Rating Cache Invalidation", () => {
+    it("✓ Should invalidate provider profile cache in Redis upon review creation", async () => {
+      const cacheBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.COMPLETED,
+      );
+
+      const cacheKey = `provider:profile:${testProvider.id}`;
+
+      // Prime the Redis cache with mock provider profile data
+      await redisService.set(
+        cacheKey,
+        JSON.stringify({ id: testProvider.id, averageRating: 4.5, totalReviews: 10 }),
+        60,
+      );
+
+      const primeCheck = await redisService.get(cacheKey);
+      expect(primeCheck).not.toBeNull();
+
+      // Submit review
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${cacheBooking.id}/review`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          rating: 5,
+          comment: "Review that invalidates cache",
+        });
+
+      expect(res.status).toBe(201);
+
+      // Verify cache key was deleted from Redis
+      const evictedCheck = await redisService.get(cacheKey);
+      expect(evictedCheck).toBeNull();
+    });
+
+    it("✓ Should invalidate provider profile cache in Redis upon review rating update", async () => {
+      const editBooking = await createBooking(
+        testCustomer.id,
+        BookingStatus.COMPLETED,
+      );
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${editBooking.id}/review`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          rating: 4,
+          comment: "Initial rating",
+        });
+
+      const reviewId = createRes.body.data?.id || createRes.body.id;
+      const cacheKey = `provider:profile:${testProvider.id}`;
+
+      // Re-prime the cache
+      await redisService.set(
+        cacheKey,
+        JSON.stringify({ id: testProvider.id, averageRating: 4.0 }),
+        60,
+      );
+
+      // Update the rating
+      const updateRes = await request(app.getHttpServer())
+        .patch(`/api/v1/reviews/${reviewId}`)
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ rating: 1, comment: "Downgraded" });
+
+      expect(updateRes.status).toBe(200);
+
+      // Verify cache was evicted
+      const evictedCheck = await redisService.get(cacheKey);
+      expect(evictedCheck).toBeNull();
     });
   });
 });

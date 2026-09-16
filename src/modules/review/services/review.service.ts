@@ -13,6 +13,7 @@ import { CreateReviewDto } from "../dto/create-review.dto";
 import { QueryReviewDto } from "../dto/query-review.dto";
 import { BookingStatus } from "@prisma-client/enums";
 import { UpdateReviewDto } from "../dto/update-review.dto";
+import { RedisService } from "@common/cache/redis.service";
 
 @Injectable()
 export class ReviewService {
@@ -22,6 +23,7 @@ export class ReviewService {
     private readonly prisma: PrismaService,
     private readonly reviewRepository: ReviewRepository,
     private readonly bookingRepository: BookingRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -71,7 +73,7 @@ export class ReviewService {
     }
 
     // 5. ACID Transaction: Insert review + Recalculate provider ratings atomically
-    return await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Create Review record (enforcing derived customerId & providerId from booking)
       const review = await this.reviewRepository.create(
         {
@@ -112,6 +114,10 @@ export class ReviewService {
         },
       };
     });
+
+    await this.redisService.del("provider:profile:" + booking.providerId);
+
+    return result;
   }
 
   async getProviderReviews(providerId: string, query: QueryReviewDto) {
@@ -153,7 +159,7 @@ export class ReviewService {
 
     // 3. If rating changed, update review + recalculate provider metrics in an ACID transaction
     if (isRatingChanged) {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const updated = await this.reviewRepository.update(
           reviewId,
           {
@@ -194,6 +200,10 @@ export class ReviewService {
           },
         };
       });
+
+      await this.redisService.del("provider:profile:" + review.providerId);
+
+      return result;
     }
 
     // 4. If only comment was updated (rating untouched)
