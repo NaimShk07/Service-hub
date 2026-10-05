@@ -6,7 +6,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Query,
-  Req,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AdminProviderService } from "../services/admin-provider.service";
@@ -14,6 +13,7 @@ import { Role } from "@prisma-client/enums";
 import { QueryAdminProviderDto } from "../dto/query-admin-provider.dto";
 import { RejectProviderDto } from "../dto/reject-provider.dto";
 import { Auth } from "@common/decorators/auth.decorator";
+import { CurrentUser } from "@common/decorators/current-user.decorator";
 
 @ApiTags("Admin - Providers")
 @Controller("admin/providers")
@@ -41,11 +41,11 @@ export class AdminProviderController {
    * Verify a provider
    */
   @Patch(":id/verify")
-  async verify(@Param("id", new ParseUUIDPipe()) id: string, @Req() req: any) {
-    return await this.adminProviderService.verifyProvider(
-      id,
-      req.user?.sub ?? req.user?.id,
-    );
+  async verify(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentUser("userId") adminUserId: string,
+  ) {
+    return await this.adminProviderService.verifyProvider(id, adminUserId);
   }
 
   /**
@@ -55,23 +55,19 @@ export class AdminProviderController {
   async reject(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: RejectProviderDto,
-    @Req() req: any,
+    @CurrentUser("userId") adminUserId: string,
   ) {
-    return await this.adminProviderService.rejectProvider(
-      id,
-      dto,
-      req.user?.sub ?? req.user?.id,
-    );
+    return await this.adminProviderService.rejectProvider(id, dto, adminUserId);
   }
 
   /**
    * Suspend a provider
    */
   @Patch(":id/suspend")
-  async suspend(@Param("id", new ParseUUIDPipe()) id: string, @Req() req: any) {
-    return await this.adminProviderService.suspendProvider(
-      id,
-      req.user?.sub ?? req.user?.id,
-    );
+  async suspend(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentUser("userId") adminUserId: string,
+  ) {
+    return await this.adminProviderService.suspendProvider(id, adminUserId);
   }
 }

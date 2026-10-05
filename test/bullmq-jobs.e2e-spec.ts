@@ -507,8 +507,10 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
         .set("Authorization", `Bearer ${customerToken}`);
 
       expect(res.status).toBe(200);
-      const body = res.body.data || res.body;
-      expect(body.success).toBe(true);
+      const updated = await prisma.notification.findUnique({
+        where: { id: notification.id },
+      });
+      expect(updated?.readAt).not.toBeNull();
     });
   });
 

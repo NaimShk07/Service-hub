@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { AdminProviderRepository } from "../repositories/admin-provider.repository";
 import { QueryAdminProviderDto } from "../dto/query-admin-provider.dto";
 import { AuditAction, VerificationStatus } from "@prisma-client/enums";
@@ -71,22 +71,25 @@ export class AdminProviderService {
     const result = await this.adminProviderRepository.updateVerificationStatus(
       id,
       VerificationStatus.REJECTED,
-      dto.rejectReason,
+      dto.reason,
     );
 
     await this.auditLogRepository.create({
       actorUserId,
       entityType: "ProviderProfile",
       entityId: id,
-      action: AuditAction.PROVIDER_VERIFIED,
+      action: AuditAction.PROVIDER_REJECTED,
       oldValue: { status: existing.verificationStatus },
       newValue: {
         status: VerificationStatus.REJECTED,
-        rejectReason: dto.rejectReason,
+        rejectReason: dto.reason,
       },
     });
 
     this.logger.log(`Successfully rejected provider profile: ${id}`);
+    await this.redisService.del(`provider:profile:${id}`);
+    await this.redisService.incrementSearchVersion();
+
     return result;
   }
 
@@ -95,6 +98,12 @@ export class AdminProviderService {
       `Admin (${actorUserId ?? "system"}) suspending provider profile: ${id}`,
     );
     const existing = await this.findOne(id);
+
+    if (existing.verificationStatus !== VerificationStatus.VERIFIED) {
+      throw new BadRequestException(
+        `Cannot suspend provider with status '${existing.verificationStatus}'. Only VERIFIED providers can be suspended.`,
+      );
+    }
 
     const result = await this.adminProviderRepository.updateVerificationStatus(
       id,
@@ -105,12 +114,15 @@ export class AdminProviderService {
       actorUserId,
       entityType: "ProviderProfile",
       entityId: id,
-      action: AuditAction.PROVIDER_VERIFIED,
+      action: AuditAction.PROVIDER_SUSPENDED,
       oldValue: { status: existing.verificationStatus },
       newValue: { status: VerificationStatus.SUSPENDED },
     });
 
     this.logger.log(`Successfully suspended provider profile: ${id}`);
+    await this.redisService.del(`provider:profile:${id}`);
+    await this.redisService.incrementSearchVersion();
+
     return result;
   }
 }

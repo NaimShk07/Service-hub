@@ -6,7 +6,7 @@ import {
   ProviderSearchSort,
   QueryProviderSearchDto,
 } from "../dto/query-provider-search.dto";
-import { VerificationStatus } from "@prisma-client/enums";
+import { UserStatus, VerificationStatus } from "@prisma-client/enums";
 import { Prisma } from "@prisma-client/client";
 import { BaseRepository } from "@database/repositories/base.repository";
 
@@ -152,6 +152,7 @@ export class ProviderRepository extends BaseRepository {
 
     const whereClause: Prisma.ProviderProfileWhereInput = {
       verificationStatus: VerificationStatus.VERIFIED,
+      user: { status: UserStatus.ACTIVE },
 
       // 1. Min Rating Filter
       ...(minRating !== undefined && { averageRating: { gte: minRating } }),

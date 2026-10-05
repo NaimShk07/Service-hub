@@ -67,7 +67,7 @@ export class AdminProviderRepository extends BaseRepository {
     status: VerificationStatus,
     rejectionReason?: string,
   ) {
-    const profile = this.prisma.providerProfile.update({
+    const profile = await this.prisma.providerProfile.update({
       where: { id },
       data: { verificationStatus: status },
     });
@@ -77,6 +77,15 @@ export class AdminProviderRepository extends BaseRepository {
         where: { providerId: id },
         data: {
           rejectionReason,
+          verificationStatus: VerificationStatus.REJECTED,
+        },
+      });
+    } else if (status === VerificationStatus.VERIFIED) {
+      await this.prisma.providerDocument.updateMany({
+        where: { providerId: id },
+        data: {
+          verificationStatus: VerificationStatus.VERIFIED,
+          verifiedAt: new Date(),
         },
       });
     }

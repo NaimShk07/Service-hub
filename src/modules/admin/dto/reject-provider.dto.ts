@@ -5,5 +5,5 @@ export class RejectProviderDto {
   @IsNotEmpty()
   @IsString()
   @Length(5, 500)
-  rejectReason: string;
+  reason: string;
 }
