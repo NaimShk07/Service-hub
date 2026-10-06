@@ -18,6 +18,8 @@ import {
 } from "@prisma-client/enums";
 import { Prisma } from "@prisma-client/client";
 import { RedisService } from "@common/cache/redis.service";
+import { AdminUserService } from "../src/modules/admin/services/admin-user.service";
+import { AdminUserRepository } from "../src/modules/admin/repositories/admin-user.repository";
 
 describe("Admin Platform Operations (e2e)", () => {
   let app: INestApplication;
@@ -398,6 +400,109 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain("own account status");
+    });
+
+    it("✓ Should filter users by role=PROVIDER and status=ACTIVE", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/users?role=PROVIDER&status=ACTIVE&page=1&limit=20")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(Array.isArray(items)).toBe(true);
+      const found = items.find((u: any) => u.id === providerUser.id);
+      expect(found).toBeDefined();
+      expect(found.status).toBe(UserStatus.ACTIVE);
+    });
+
+    it("✓ Should filter users by exact email and phone", async () => {
+      const emailRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/users?email=${customerUser.email}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(emailRes.status).toBe(200);
+      const emailItems = emailRes.body.data.data || emailRes.body.data.items;
+      expect(emailItems.some((u: any) => u.email === customerUser.email)).toBe(true);
+
+      const phoneRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/users?phone=${encodeURIComponent(customerUser.phone)}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(phoneRes.status).toBe(200);
+      const phoneItems = phoneRes.body.data.data || phoneRes.body.data.items;
+      expect(phoneItems.some((u: any) => u.phone === customerUser.phone)).toBe(true);
+    });
+
+    it("✓ Should allow admin to suspend and reactivate a customer (ACTIVE -> SUSPENDED -> ACTIVE)", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/admin/users/${customerUser.id}/status`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ status: UserStatus.SUSPENDED });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe(UserStatus.SUSPENDED);
+
+      const updated = await prisma.user.findUnique({
+        where: { id: customerUser.id },
+      });
+      expect(updated?.status).toBe(UserStatus.SUSPENDED);
+
+      // Restore to ACTIVE
+      const restoreRes = await request(app.getHttpServer())
+        .patch(`/api/v1/admin/users/${customerUser.id}/status`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ status: UserStatus.ACTIVE });
+
+      expect(restoreRes.status).toBe(200);
+      expect(restoreRes.body.data.status).toBe(UserStatus.ACTIVE);
+    });
+
+    it("✓ Should prevent suspending the final active admin (Invariant 2)", async () => {
+      const adminService = app.get(AdminUserService);
+      const adminRepo = app.get(AdminUserRepository);
+
+      const spy = jest
+        .spyOn(adminRepo, "countActiveAdmin")
+        .mockResolvedValueOnce(1);
+
+      await expect(
+        adminService.updateStatus(
+          adminUser.id,
+          UserStatus.SUSPENDED,
+          "00000000-0000-0000-0000-000000000001",
+        ),
+      ).rejects.toThrow(
+        "Cannot suspend or deactivate the final active administrative account",
+      );
+
+      spy.mockRestore();
+    });
+
+    it("✓ Should allow suspending an admin when multiple active admins exist", async () => {
+      const ts = Date.now();
+      const secondAdmin = await prisma.user.create({
+        data: {
+          email: `admin2_${ts}@servicehub.test`,
+          passwordHash: "hash123",
+          firstName: "Second",
+          lastName: "Admin",
+          phone: `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+          role: Role.ADMIN,
+          status: UserStatus.ACTIVE,
+        },
+      });
+
+      try {
+        const res = await request(app.getHttpServer())
+          .patch(`/api/v1/admin/users/${secondAdmin.id}/status`)
+          .set("Authorization", `Bearer ${adminToken}`)
+          .send({ status: UserStatus.SUSPENDED });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.status).toBe(UserStatus.SUSPENDED);
+      } finally {
+        await prisma.user.delete({ where: { id: secondAdmin.id } }).catch(() => null);
+      }
     });
   });
 

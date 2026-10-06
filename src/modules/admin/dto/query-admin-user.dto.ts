@@ -1,6 +1,12 @@
-import { Role, UserStatus } from "@prisma-client/enums";
+import { UserStatus } from "@prisma-client/enums";
 import { Type } from "class-transformer";
 import { IsEnum, IsOptional, IsString, Max, Min } from "class-validator";
+
+export enum AdminUserRoleFilter {
+  USER = "USER",
+  ADMIN = "ADMIN",
+  PROVIDER = "PROVIDER",
+}
 
 export class QueryAdminUserDto {
   @IsOptional()
@@ -19,10 +25,22 @@ export class QueryAdminUserDto {
   search?: string;
 
   @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
+  @IsEnum(AdminUserRoleFilter)
+  role?: AdminUserRoleFilter;
 
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  createdAt?: string;
 }

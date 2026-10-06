@@ -14,6 +14,7 @@ import { Auth } from "@common/decorators/auth.decorator";
 import { AdminUserService } from "../services/admin-user.service";
 import { QueryAdminUserDto } from "../dto/query-admin-user.dto";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
+import { UpdateUserStatusDto } from "../dto/update-user-status.dto";
 
 @ApiTags("Admin - Users")
 @Controller("admin/users")
@@ -44,8 +45,12 @@ export class AdminUserController {
   async updateStatus(
     @Param("id", new ParseUUIDPipe()) id: string,
     @CurrentUser("userId") adminUserId: string,
-    @Body("status", new ParseEnumPipe(UserStatus)) status: UserStatus,
+    @Body() dto: UpdateUserStatusDto,
   ) {
-    return await this.adminUserService.updateStatus(id, status, adminUserId);
+    return await this.adminUserService.updateStatus(
+      id,
+      dto.status,
+      adminUserId,
+    );
   }
 }

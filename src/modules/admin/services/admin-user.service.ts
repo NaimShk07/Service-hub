@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { UserStatus } from "@prisma-client/enums";
+import { Role, UserStatus } from "@prisma-client/enums";
 import { AdminUserRepository } from "../repositories/admin-user.repository";
 import { QueryAdminUserDto } from "../dto/query-admin-user.dto";
 
@@ -32,10 +32,27 @@ export class AdminUserService {
   async updateStatus(id: string, status: UserStatus, adminUserId?: string) {
     const existing = await this.findOne(id);
 
+    // Invariant 1: Admin cannot change their own account status
     if (existing.id === adminUserId) {
       throw new BadRequestException(
         "Admin cannot change their own account status",
       );
+    }
+
+    // Invariant 2: Cannot remove or suspend the final active admin
+    if (
+      existing.role === Role.ADMIN &&
+      existing.status === UserStatus.ACTIVE &&
+      status !== UserStatus.ACTIVE
+    ) {
+      const activeAdminCount =
+        await this.adminUserRepository.countActiveAdmin();
+
+      if (activeAdminCount <= 1) {
+        throw new BadRequestException(
+          "Cannot suspend or deactivate the final active administrative account",
+        );
+      }
     }
 
     this.logger.log(
