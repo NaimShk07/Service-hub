@@ -10,7 +10,7 @@ import { ApiTags } from "@nestjs/swagger";
 import { Role } from "@prisma-client/enums";
 import { Auth } from "@common/decorators/auth.decorator";
 import { AdminBookingService } from "../services/admin-booking.service";
-import { QueryBookingsDto } from "@modules/booking/dto/query-booking.dto";
+import { QueryAdminBookingDto } from "../dto/query-admin-booking.dto";
 
 @ApiTags("Admin - Bookings")
 @Controller("admin/bookings")
@@ -22,7 +22,7 @@ export class AdminBookingController {
    * Get all bookings
    */
   @Get("")
-  async findAll(@Query() queryDto: QueryBookingsDto) {
+  async findAll(@Query() queryDto: QueryAdminBookingDto) {
     return await this.adminBookingService.findAll(queryDto);
   }
 

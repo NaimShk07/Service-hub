@@ -21,24 +21,46 @@ export class BookingRepository extends BaseRepository {
   }
 
   async findAll(
-    queryDto: QueryBookingsDto,
+    queryDto: {
+      status?: BookingStatus;
+      from?: string;
+      to?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      customerId?: string;
+      providerId?: string;
+      paymentStatus?: any;
+      page?: number;
+      limit?: number;
+    },
     filters?: { customerId?: string; providerId?: string },
   ) {
-    const { status, from, to, page = 1, limit = 10 } = queryDto;
+    const { status, page = 1, limit = 10, paymentStatus } = queryDto;
+    const fromDate = queryDto.dateFrom || queryDto.from;
+    const toDate = queryDto.dateTo || queryDto.to;
+    const customerId = filters?.customerId || queryDto.customerId;
+    const providerId = filters?.providerId || queryDto.providerId;
     const skip = (page - 1) * limit;
 
     const where: Prisma.BookingWhereInput = {
-      ...(filters?.customerId && { customerId: filters.customerId }),
-      ...(filters?.providerId && { providerId: filters.providerId }),
+      ...(customerId && { customerId }),
+      ...(providerId && { providerId }),
       ...(status && { bookingStatus: status }),
-      ...(from || to
+      ...(fromDate || toDate
         ? {
             bookingDate: {
-              ...(from && { gte: new Date(from) }),
-              ...(to && { lte: new Date(to) }),
+              ...(fromDate && { gte: new Date(fromDate) }),
+              ...(toDate && { lte: new Date(toDate) }),
             },
           }
         : {}),
+      ...(paymentStatus && {
+        payments: {
+          some: {
+            status: paymentStatus,
+          },
+        },
+      }),
     };
 
     const query = this.prisma.booking.findMany({
@@ -70,6 +92,16 @@ export class BookingRepository extends BaseRepository {
             durationMinutes: true,
           },
         },
+        payments: {
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            currency: true,
+            gateway: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
@@ -86,7 +118,14 @@ export class BookingRepository extends BaseRepository {
       },
       include: {
         customer: {
-          select: { id: true, firstName: true, lastName: true, phone: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            status: true,
+          },
         },
         provider: {
           select: {
@@ -94,10 +133,33 @@ export class BookingRepository extends BaseRepository {
             userId: true,
             businessName: true,
             profileImageUrl: true,
+            averageRating: true,
+            totalReviews: true,
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
           },
         },
         providerService: true,
         payments: true,
+        review: true,
+        notifications: {
+          select: {
+            id: true,
+            type: true,
+            channel: true,
+            status: true,
+            sentAt: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
   }

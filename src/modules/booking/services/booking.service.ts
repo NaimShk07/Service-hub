@@ -279,6 +279,22 @@ export class BookingService {
     return booking;
   }
 
+  async getAllBookingsForAdmin(queryDto: any) {
+    this.logger.log("Admin querying platform-wide bookings");
+    return this.bookingRepository.findAll(queryDto);
+  }
+
+  async getBookingByIdForAdmin(bookingId: string) {
+    this.logger.log(`Admin investigating booking "${bookingId}"`);
+    const booking = await this.bookingRepository.findById(bookingId);
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID "${bookingId}" not found`);
+    }
+
+    return booking;
+  }
+
   async cancelBookingAsCustomer(
     bookingId: string,
     customerId: string,

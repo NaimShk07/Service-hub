@@ -11,6 +11,8 @@ import {
   AuditAction,
   BookingStatus,
   DocumentType,
+  PaymentGateway,
+  PaymentStatus,
   Role,
   ServiceMode,
   UserStatus,
@@ -39,6 +41,8 @@ describe("Admin Platform Operations (e2e)", () => {
   let service: any;
   let providerServiceOffering: any;
   let testBooking: any;
+  let testPayment: any;
+  let testReview: any;
 
   let pendingProviderUser: any;
   let pendingProviderProfile: any;
@@ -181,6 +185,29 @@ describe("Admin Platform Operations (e2e)", () => {
       },
     });
 
+    testPayment = await prisma.payment.create({
+      data: {
+        bookingId: testBooking.id,
+        gateway: PaymentGateway.RAZORPAY,
+        gatewayOrderId: `order_${ts}_${uid}`,
+        gatewayPaymentId: `pay_${ts}_${uid}`,
+        amount: new Prisma.Decimal("1500.00"),
+        currency: "INR",
+        status: PaymentStatus.SUCCESS,
+        paidAt: new Date(),
+      },
+    });
+
+    testReview = await prisma.review.create({
+      data: {
+        bookingId: testBooking.id,
+        customerId: customerUser.id,
+        providerId: providerProfile.id,
+        rating: 5,
+        comment: "Outstanding service delivered on time!",
+      },
+    });
+
     // 4. Seed Pending Provider for Verification Tests
     pendingProviderUser = await prisma.user.create({
       data: {
@@ -247,6 +274,12 @@ describe("Admin Platform Operations (e2e)", () => {
   afterAll(async () => {
     // Teardown
     if (testBooking?.id) {
+      await prisma.review.deleteMany({
+        where: { bookingId: testBooking.id },
+      }).catch(() => null);
+      await prisma.payment.deleteMany({
+        where: { bookingId: testBooking.id },
+      }).catch(() => null);
       await prisma.booking.deleteMany({
         where: { id: testBooking.id },
       }).catch(() => null);
@@ -508,7 +541,7 @@ describe("Admin Platform Operations (e2e)", () => {
 
   // =========================================================================
   describe("3. Admin Bookings (/api/v1/admin/bookings)", () => {
-    it("✓ Should list platform-wide bookings including customer and provider info", async () => {
+    it("✓ Should list platform-wide bookings including customer, provider, and payment summary", async () => {
       const res = await request(app.getHttpServer())
         .get("/api/v1/admin/bookings?page=1&limit=50")
         .set("Authorization", `Bearer ${adminToken}`);
@@ -519,28 +552,147 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(Array.isArray(items)).toBe(true);
 
       const bookingItem = items.find((b: any) => b.id === testBooking.id);
-      if (bookingItem) {
-        expect(bookingItem.customer).toBeDefined();
-        expect(bookingItem.customer.email).toBe(customerUser.email);
-        expect(bookingItem.provider).toBeDefined();
-        expect(bookingItem.provider.businessName).toBe(providerProfile.businessName);
-      } else {
-        const single = await request(app.getHttpServer())
-          .get(`/api/v1/admin/bookings/${testBooking.id}`)
-          .set("Authorization", `Bearer ${adminToken}`);
-        expect(single.status).toBe(200);
-        expect(single.body.data.id).toBe(testBooking.id);
-      }
+      expect(bookingItem).toBeDefined();
+      expect(bookingItem.customer).toBeDefined();
+      expect(bookingItem.customer.email).toBe(customerUser.email);
+      expect(bookingItem.customer.passwordHash).toBeUndefined();
+      expect(bookingItem.customer.refreshTokenHash).toBeUndefined();
+      expect(bookingItem.provider).toBeDefined();
+      expect(bookingItem.provider.businessName).toBe(providerProfile.businessName);
+      expect(bookingItem.payments).toBeDefined();
+      expect(Array.isArray(bookingItem.payments)).toBe(true);
+      expect(bookingItem.payments.some((p: any) => p.status === PaymentStatus.SUCCESS)).toBe(true);
     });
 
-    it("✓ Should fetch booking detail by ID", async () => {
+    it("✓ Should filter bookings by status", async () => {
+      const confirmedRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?status=${BookingStatus.CONFIRMED}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(confirmedRes.status).toBe(200);
+      const items = confirmedRes.body.data.data || confirmedRes.body.data.items;
+      expect(items.every((b: any) => b.bookingStatus === BookingStatus.CONFIRMED)).toBe(true);
+      expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
+
+      const cancelledRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?status=${BookingStatus.CANCELLED}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(cancelledRes.status).toBe(200);
+      const cancelledItems = cancelledRes.body.data.data || cancelledRes.body.data.items;
+      expect(cancelledItems.some((b: any) => b.id === testBooking.id)).toBe(false);
+    });
+
+    it("✓ Should filter bookings by providerId", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?providerId=${providerProfile.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.every((b: any) => b.providerId === providerProfile.id)).toBe(true);
+      expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
+    });
+
+    it("✓ Should filter bookings by customerId", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?customerId=${customerUser.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.every((b: any) => b.customerId === customerUser.id)).toBe(true);
+      expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
+    });
+
+    it("✓ Should filter bookings by paymentStatus", async () => {
+      const successRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?paymentStatus=${PaymentStatus.SUCCESS}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(successRes.status).toBe(200);
+      const items = successRes.body.data.data || successRes.body.data.items;
+      expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
+
+      const refundedRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?paymentStatus=${PaymentStatus.REFUNDED}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(refundedRes.status).toBe(200);
+      const refundedItems = refundedRes.body.data.data || refundedRes.body.data.items;
+      expect(refundedItems.some((b: any) => b.id === testBooking.id)).toBe(false);
+    });
+
+    it("✓ Should filter bookings by date range (dateFrom and dateTo)", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings?dateFrom=${today}&dateTo=${today}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
+    });
+
+    it("✓ Should fetch deep booking detail by ID with Customer, Provider, Payment, Review, and Notifications", async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/admin/bookings/${testBooking.id}`)
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.id).toBe(testBooking.id);
-      expect(res.body.data.serviceName).toBe(service.name);
+      const booking = res.body.data;
+      expect(booking.id).toBe(testBooking.id);
+      expect(booking.serviceName).toBe(service.name);
+
+      // Customer audit inspection without security leaks
+      expect(booking.customer).toBeDefined();
+      expect(booking.customer.id).toBe(customerUser.id);
+      expect(booking.customer.email).toBe(customerUser.email);
+      expect(booking.customer.phone).toBe(customerUser.phone);
+      expect(booking.customer.passwordHash).toBeUndefined();
+      expect(booking.customer.refreshTokenHash).toBeUndefined();
+
+      // Provider audit inspection
+      expect(booking.provider).toBeDefined();
+      expect(booking.provider.id).toBe(providerProfile.id);
+      expect(booking.provider.businessName).toBe(providerProfile.businessName);
+      expect(booking.provider.user).toBeDefined();
+      expect(booking.provider.user.email).toBe(providerUser.email);
+      expect(booking.provider.user.passwordHash).toBeUndefined();
+
+      // Payment investigation
+      expect(Array.isArray(booking.payments)).toBe(true);
+      expect(booking.payments.length).toBeGreaterThanOrEqual(1);
+      const payment = booking.payments[0];
+      expect(payment.status).toBe(PaymentStatus.SUCCESS);
+      expect(payment.gateway).toBe(PaymentGateway.RAZORPAY);
+
+      // Review investigation
+      expect(booking.review).toBeDefined();
+      expect(booking.review.rating).toBe(5);
+      expect(booking.review.comment).toBe("Outstanding service delivered on time!");
+
+      // Notifications list inspection
+      expect(Array.isArray(booking.notifications)).toBe(true);
+    });
+
+    it("✓ Should return 400 Bad Request for malformed booking UUID", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/bookings/not-a-valid-uuid")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("✓ Should return 404 Not Found for non-existent booking UUID", async () => {
+      const nonExistentId = "a0000000-0000-0000-0000-000000000000";
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/bookings/${nonExistentId}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
     });
   });
 
