@@ -699,7 +699,7 @@ describe("Admin Platform Operations (e2e)", () => {
 
   // =========================================================================
   describe("4. Admin Dashboard (/api/v1/admin/dashboard)", () => {
-    it("✓ Should return aggregated metrics across users, providers, bookings, and revenue", async () => {
+    it("✓ Should return aggregated platform operational metrics matching Day 6 schema", async () => {
       const res = await request(app.getHttpServer())
         .get("/api/v1/admin/dashboard")
         .set("Authorization", `Bearer ${adminToken}`);
@@ -707,18 +707,44 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(res.status).toBe(200);
       const dashboard = res.body.data;
 
+      // 1. Users metrics
       expect(dashboard).toHaveProperty("users");
+      expect(typeof dashboard.users.total).toBe("number");
+      expect(typeof dashboard.users.customers).toBe("number");
+      expect(typeof dashboard.users.providers).toBe("number");
+      expect(dashboard.users.total).toBe(dashboard.users.customers + dashboard.users.providers);
       expect(dashboard.users.total).toBeGreaterThanOrEqual(2);
-      expect(dashboard.users).toHaveProperty("byStatus");
 
+      // 2. Providers verification metrics
       expect(dashboard).toHaveProperty("providers");
-      expect(dashboard.providers.total).toBeGreaterThanOrEqual(1);
-      expect(dashboard.providers).toHaveProperty("byStatus");
+      expect(typeof dashboard.providers.pendingVerification).toBe("number");
+      expect(typeof dashboard.providers.verified).toBe("number");
+      expect(typeof dashboard.providers.suspended).toBe("number");
+      expect(dashboard.providers.pendingVerification).toBeGreaterThanOrEqual(1);
 
+      // 3. Bookings operational metrics
       expect(dashboard).toHaveProperty("bookings");
+      expect(typeof dashboard.bookings.total).toBe("number");
+      expect(typeof dashboard.bookings.today).toBe("number");
+      expect(typeof dashboard.bookings.confirmed).toBe("number");
+      expect(typeof dashboard.bookings.completed).toBe("number");
+      expect(typeof dashboard.bookings.cancelled).toBe("number");
       expect(dashboard.bookings.total).toBeGreaterThanOrEqual(1);
-      expect(dashboard.bookings).toHaveProperty("byStatus");
 
+      // 4. Payments metrics
+      expect(dashboard).toHaveProperty("payments");
+      expect(typeof dashboard.payments.successful).toBe("number");
+      expect(typeof dashboard.payments.refunded).toBe("number");
+      expect(dashboard.payments.successful).toBeGreaterThanOrEqual(1);
+
+      // 5. Reviews metrics
+      expect(dashboard).toHaveProperty("reviews");
+      expect(typeof dashboard.reviews.total).toBe("number");
+      expect(typeof dashboard.reviews.averageRating).toBe("number");
+      expect(dashboard.reviews.total).toBeGreaterThanOrEqual(1);
+      expect(dashboard.reviews.averageRating).toBe(5);
+
+      // Revenue backward compatibility
       expect(dashboard).toHaveProperty("revenue");
       expect(typeof dashboard.revenue.totalVolume).toBe("number");
     });
