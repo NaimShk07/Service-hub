@@ -12,13 +12,17 @@ import { AdminBookingController } from "./controllers/admin-booking.controller";
 import { PrismaModule } from "@database/prisma/prisma.module";
 import { AdminDashboardService } from "./services/admin-dashboard.service";
 import { AdminDashboardController } from "./controllers/admin-dashboard.controller";
+import { PaymentModule } from "@modules/payment/payment.module";
+import { AdminPaymentController } from "./controllers/admin-payment.controller";
+import { AdminPaymentService } from "./services/admin-payment.service";
 
 @Module({
-  imports: [BookingModule, PrismaModule],
+  imports: [BookingModule, PaymentModule, PrismaModule],
   controllers: [
     AdminProviderController,
     AdminUserController,
     AdminBookingController,
+    AdminPaymentController,
     AdminDashboardController,
   ],
   providers: [
@@ -27,6 +31,7 @@ import { AdminDashboardController } from "./controllers/admin-dashboard.controll
     AdminUserService,
     AdminUserRepository,
     AdminBookingService,
+    AdminPaymentService,
     AdminDashboardService,
     AuditLogRepository,
   ],

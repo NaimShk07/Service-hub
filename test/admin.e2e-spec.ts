@@ -351,6 +351,7 @@ describe("Admin Platform Operations (e2e)", () => {
       { method: "get", path: "/api/v1/admin/users" },
       { method: "get", path: "/api/v1/admin/bookings" },
       { method: "get", path: "/api/v1/admin/providers" },
+      { method: "get", path: "/api/v1/admin/payments" },
     ];
 
     for (const ep of adminEndpoints) {
@@ -918,6 +919,208 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain("Provider profile is not verified");
+    });
+  });
+
+  // =========================================================================
+  describe("6. Admin Payment & Refund Operations (/api/v1/admin/payments)", () => {
+    let pendingPaymentForTest: any;
+
+    beforeAll(async () => {
+      // Seed a CREATED/PENDING payment to test state machine restrictions
+      const ts = Date.now();
+      pendingPaymentForTest = await prisma.payment.create({
+        data: {
+          bookingId: testBooking.id,
+          gateway: PaymentGateway.RAZORPAY,
+          gatewayOrderId: `order_pending_${ts}`,
+          amount: new Prisma.Decimal("500.00"),
+          currency: "INR",
+          status: PaymentStatus.PENDING,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      if (pendingPaymentForTest?.id) {
+        await prisma.payment.deleteMany({
+          where: { id: pendingPaymentForTest.id },
+        }).catch(() => null);
+      }
+    });
+
+    it("✓ Should list platform-wide payments with pagination, booking, customer, and provider info", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/payments?page=1&limit=50")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const data = res.body.data;
+      const items = data.data || data.items;
+      expect(Array.isArray(items)).toBe(true);
+
+      const found = items.find((p: any) => p.id === testPayment.id);
+      expect(found).toBeDefined();
+      expect(found.status).toBe(PaymentStatus.SUCCESS);
+      expect(found.booking).toBeDefined();
+      expect(found.booking.customer).toBeDefined();
+      expect(found.booking.customer.email).toBe(customerUser.email);
+      expect(found.booking.customer.passwordHash).toBeUndefined();
+      expect(found.booking.customer.refreshTokenHash).toBeUndefined();
+      expect(found.booking.provider).toBeDefined();
+      expect(found.booking.provider.businessName).toBe(providerProfile.businessName);
+    });
+
+    it("✓ Should filter payments by status=SUCCESS", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/payments?status=${PaymentStatus.SUCCESS}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.every((p: any) => p.status === PaymentStatus.SUCCESS)).toBe(true);
+      expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
+    });
+
+    it("✓ Should filter payments by gateway=RAZORPAY", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/payments?gateway=${PaymentGateway.RAZORPAY}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.every((p: any) => p.gateway === PaymentGateway.RAZORPAY)).toBe(true);
+      expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
+    });
+
+    it("✓ Should filter payments by bookingId", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/payments?bookingId=${testBooking.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.every((p: any) => p.bookingId === testBooking.id)).toBe(true);
+      expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
+    });
+
+    it("✓ Should filter payments by date range (dateFrom and dateTo)", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/payments?dateFrom=${today}&dateTo=${today}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
+    });
+
+    it("✓ Should fetch deep payment investigation details by ID", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/payments/${testPayment.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const payment = res.body.data;
+      expect(payment.id).toBe(testPayment.id);
+      expect(payment.status).toBe(PaymentStatus.SUCCESS);
+      expect(payment.booking).toBeDefined();
+      expect(payment.booking.customer).toBeDefined();
+      expect(payment.booking.customer.email).toBe(customerUser.email);
+      expect(payment.booking.provider).toBeDefined();
+    });
+
+    it("✓ Should return 400 Bad Request for malformed payment UUID", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/payments/not-a-valid-uuid")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("✓ Should return 404 Not Found for non-existent payment UUID", async () => {
+      const nonExistentId = "b0000000-0000-0000-0000-000000000000";
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/payments/${nonExistentId}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("✓ Refund Safety: Should reject refund if amount exceeds captured amount (400 Bad Request)", async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payments/${testPayment.id}/refund`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          amount: 50000.0, // captured is 1500.00
+          reason: "Excessive refund amount test",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("cannot exceed captured");
+    });
+
+    it("✓ Refund Safety: Should reject refund if amount is zero or negative (400 Bad Request)", async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payments/${testPayment.id}/refund`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          amount: -50.0,
+          reason: "Negative refund amount test",
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("✓ Refund Safety: Should reject refund for non-SUCCESS payments (400 Bad Request)", async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payments/${pendingPaymentForTest.id}/refund`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          reason: "Attempting refund on PENDING payment",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("Only SUCCESS payments can be refunded");
+    });
+
+    it("✓ Should successfully refund a SUCCESS payment and update booking and audit log", async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payments/${testPayment.id}/refund`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          reason: "Customer requested cancellation approved by admin",
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.success).toBe(true);
+      expect(res.body.data.status).toBe(PaymentStatus.REFUNDED);
+      expect(res.body.data.refundId).toBeDefined();
+
+      // Verify DB payment status
+      const updatedPayment = await prisma.payment.findUnique({
+        where: { id: testPayment.id },
+      });
+      expect(updatedPayment?.status).toBe(PaymentStatus.REFUNDED);
+      expect(updatedPayment?.refundedAt).toBeDefined();
+
+      // Verify booking was transitioned to CANCELLED
+      const updatedBooking = await prisma.booking.findUnique({
+        where: { id: testBooking.id },
+      });
+      expect(updatedBooking?.bookingStatus).toBe(BookingStatus.CANCELLED);
+    });
+
+    it("✓ Refund Idempotency: Attempting to refund an already refunded payment must be rejected", async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payments/${testPayment.id}/refund`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          reason: "Second click on refund button",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("Payment has already been refunded");
     });
   });
 });

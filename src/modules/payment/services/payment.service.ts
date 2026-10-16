@@ -581,6 +581,20 @@ export class PaymentService {
     }
   }
 
+  async getAllPaymentsForAdmin(queryDto: any) {
+    this.logger.log("Admin querying platform-wide payments");
+    return this.paymentRepository.findAll(queryDto);
+  }
+
+  async getPaymentByIdForAdmin(paymentId: string) {
+    this.logger.log(`Admin inspecting payment: ${paymentId}`);
+    const payment = await this.paymentRepository.findById(paymentId);
+    if (!payment) {
+      throw new NotFoundException(`Payment with ID "${paymentId}" not found`);
+    }
+    return payment;
+  }
+
   async refundPayment(
     adminUserId: string,
     paymentId: string,
@@ -595,10 +609,30 @@ export class PaymentService {
       throw new NotFoundException(`Payment with ID "${paymentId}" not found`);
     }
 
+    // 1. Idempotency & State Invariant: Prevent double refunds
+    if (payment.status === PaymentStatus.REFUNDED) {
+      throw new BadRequestException("Payment has already been refunded");
+    }
+
+    // 2. Only captured/successful payments can be refunded
     if (payment.status !== PaymentStatus.SUCCESS) {
       throw new BadRequestException(
         `Only SUCCESS payments can be refunded. Current status: "${payment.status}"`,
       );
+    }
+
+    // 3. Amount Safety Invariant: refund amount <= captured amount
+    const capturedAmount = Number(payment.amount);
+    if (dto.amount !== undefined && dto.amount !== null) {
+      const refundAmount = Number(dto.amount);
+      if (refundAmount <= 0) {
+        throw new BadRequestException("Refund amount must be greater than zero");
+      }
+      if (refundAmount > capturedAmount) {
+        throw new BadRequestException(
+          `Refund amount (${refundAmount}) cannot exceed captured amount (${capturedAmount})`,
+        );
+      }
     }
 
     if (!payment.gatewayPaymentId) {
@@ -610,7 +644,7 @@ export class PaymentService {
     // Upstream gateway refund request
     const refundResult = await this.paymentGateway.createRefund({
       paymentId: payment.gatewayPaymentId,
-      amount: dto.amount || Number(payment.amount),
+      amount: dto.amount || capturedAmount,
       notes: { reason: dto.reason || "Admin initiated refund" },
     });
 

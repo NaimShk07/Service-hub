@@ -33,6 +33,74 @@ export class PaymentRepository extends BaseRepository {
     });
   }
 
+  async findAll(queryDto: {
+    status?: PaymentStatus;
+    gateway?: PaymentGateway;
+    bookingId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { status, gateway, bookingId, dateFrom, dateTo, page = 1, limit = 10 } = queryDto;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PaymentWhereInput = {
+      ...(status && { status }),
+      ...(gateway && { gateway }),
+      ...(bookingId && { bookingId }),
+      ...(dateFrom || dateTo
+        ? {
+            createdAt: {
+              ...(dateFrom && { gte: new Date(dateFrom) }),
+              ...(dateTo && {
+                lte: dateTo.includes("T")
+                  ? new Date(dateTo)
+                  : new Date(`${dateTo}T23:59:59.999Z`),
+              }),
+            },
+          }
+        : {}),
+    };
+
+    const query = this.prisma.payment.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        booking: {
+          select: {
+            id: true,
+            serviceName: true,
+            bookingStatus: true,
+            bookingDate: true,
+            customer: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            provider: {
+              select: {
+                id: true,
+                businessName: true,
+                profileImageUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const total = this.prisma.payment.count({ where });
+
+    return this.paginate(query, total, page, limit);
+  }
+
   async findById(id: string) {
     return this.prisma.payment.findUnique({
       where: { id },
