@@ -36,6 +36,88 @@ export class AuditLogRepository extends BaseRepository {
     });
   }
 
+  async findAll(queryDto: {
+    action?: AuditAction;
+    entityType?: string;
+    entityId?: string;
+    adminId?: string;
+    actorUserId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const {
+      action,
+      entityType,
+      entityId,
+      dateFrom,
+      dateTo,
+      page = 1,
+      limit = 10,
+    } = queryDto;
+    const actorUserId = queryDto.adminId || queryDto.actorUserId;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AuditLogWhereInput = {
+      ...(action && { action }),
+      ...(entityType && { entityType }),
+      ...(entityId && { entityId }),
+      ...(actorUserId && { actorUserId }),
+      ...(dateFrom || dateTo
+        ? {
+            createdAt: {
+              ...(dateFrom && { gte: new Date(dateFrom) }),
+              ...(dateTo && {
+                lte: dateTo.includes("T")
+                  ? new Date(dateTo)
+                  : new Date(`${dateTo}T23:59:59.999Z`),
+              }),
+            },
+          }
+        : {}),
+    };
+
+    const query = this.prisma.auditLog.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        actorUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    const total = this.prisma.auditLog.count({ where });
+
+    return this.paginate(query, total, page, limit);
+  }
+
+  async findById(id: string) {
+    return await this.prisma.auditLog.findUnique({
+      where: { id },
+      include: {
+        actorUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+  }
+
   async findByEntity(entityType: string, entityId: string) {
     return await this.prisma.auditLog.findMany({
       where: { entityType, entityId },

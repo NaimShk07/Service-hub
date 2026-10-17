@@ -274,30 +274,42 @@ describe("Admin Platform Operations (e2e)", () => {
   afterAll(async () => {
     // Teardown
     if (testBooking?.id) {
-      await prisma.review.deleteMany({
-        where: { bookingId: testBooking.id },
-      }).catch(() => null);
-      await prisma.payment.deleteMany({
-        where: { bookingId: testBooking.id },
-      }).catch(() => null);
-      await prisma.booking.deleteMany({
-        where: { id: testBooking.id },
-      }).catch(() => null);
+      await prisma.review
+        .deleteMany({
+          where: { bookingId: testBooking.id },
+        })
+        .catch(() => null);
+      await prisma.payment
+        .deleteMany({
+          where: { bookingId: testBooking.id },
+        })
+        .catch(() => null);
+      await prisma.booking
+        .deleteMany({
+          where: { id: testBooking.id },
+        })
+        .catch(() => null);
     }
     if (providerServiceOffering?.id) {
-      await prisma.providerService.delete({
-        where: { id: providerServiceOffering.id },
-      }).catch(() => null);
+      await prisma.providerService
+        .delete({
+          where: { id: providerServiceOffering.id },
+        })
+        .catch(() => null);
     }
     if (service?.id) {
-      await prisma.service.delete({
-        where: { id: service.id },
-      }).catch(() => null);
+      await prisma.service
+        .delete({
+          where: { id: service.id },
+        })
+        .catch(() => null);
     }
     if (category?.id) {
-      await prisma.category.delete({
-        where: { id: category.id },
-      }).catch(() => null);
+      await prisma.category
+        .delete({
+          where: { id: category.id },
+        })
+        .catch(() => null);
     }
 
     const profileIds = [
@@ -307,15 +319,21 @@ describe("Admin Platform Operations (e2e)", () => {
     ].filter(Boolean);
 
     if (profileIds.length > 0) {
-      await prisma.providerDocument.deleteMany({
-        where: { providerId: { in: profileIds } },
-      }).catch(() => null);
-      await prisma.providerLocation.deleteMany({
-        where: { providerId: { in: profileIds } },
-      }).catch(() => null);
-      await prisma.providerProfile.deleteMany({
-        where: { id: { in: profileIds } },
-      }).catch(() => null);
+      await prisma.providerDocument
+        .deleteMany({
+          where: { providerId: { in: profileIds } },
+        })
+        .catch(() => null);
+      await prisma.providerLocation
+        .deleteMany({
+          where: { providerId: { in: profileIds } },
+        })
+        .catch(() => null);
+      await prisma.providerProfile
+        .deleteMany({
+          where: { id: { in: profileIds } },
+        })
+        .catch(() => null);
     }
 
     const userIds = [
@@ -327,17 +345,21 @@ describe("Admin Platform Operations (e2e)", () => {
     ].filter(Boolean);
 
     if (userIds.length > 0) {
-      await prisma.auditLog.deleteMany({
-        where: {
-          OR: [
-            { actorUserId: { in: userIds } },
-            { entityId: { in: profileIds } },
-          ],
-        },
-      }).catch(() => null);
-      await prisma.user.deleteMany({
-        where: { id: { in: userIds } },
-      }).catch(() => null);
+      await prisma.auditLog
+        .deleteMany({
+          where: {
+            OR: [
+              { actorUserId: { in: userIds } },
+              { entityId: { in: profileIds } },
+            ],
+          },
+        })
+        .catch(() => null);
+      await prisma.user
+        .deleteMany({
+          where: { id: { in: userIds } },
+        })
+        .catch(() => null);
     }
 
     await prisma.$disconnect();
@@ -352,22 +374,27 @@ describe("Admin Platform Operations (e2e)", () => {
       { method: "get", path: "/api/v1/admin/bookings" },
       { method: "get", path: "/api/v1/admin/providers" },
       { method: "get", path: "/api/v1/admin/payments" },
+      { method: "get", path: "/api/v1/admin/audit-logs" },
     ];
 
     for (const ep of adminEndpoints) {
       it(`✓ ${ep.path} should reject unauthenticated requests (401 Unauthorized)`, async () => {
-        const res = await (request(app.getHttpServer()) as any)[ep.method](ep.path);
+        const res = await (request(app.getHttpServer()) as any)[ep.method](
+          ep.path,
+        );
         expect(res.status).toBe(401);
       });
 
       it(`✓ ${ep.path} should reject non-admin users (403 Forbidden)`, async () => {
-        const res = await (request(app.getHttpServer()) as any)[ep.method](ep.path)
+        const res = await (request(app.getHttpServer()) as any)
+          [ep.method](ep.path)
           .set("Authorization", `Bearer ${customerToken}`);
         expect(res.status).toBe(403);
       });
 
       it(`✓ ${ep.path} should allow admin user (200 OK)`, async () => {
-        const res = await (request(app.getHttpServer()) as any)[ep.method](ep.path)
+        const res = await (request(app.getHttpServer()) as any)
+          [ep.method](ep.path)
           .set("Authorization", `Bearer ${adminToken}`);
         expect(res.status).toBe(200);
       });
@@ -456,15 +483,21 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(emailRes.status).toBe(200);
       const emailItems = emailRes.body.data.data || emailRes.body.data.items;
-      expect(emailItems.some((u: any) => u.email === customerUser.email)).toBe(true);
+      expect(emailItems.some((u: any) => u.email === customerUser.email)).toBe(
+        true,
+      );
 
       const phoneRes = await request(app.getHttpServer())
-        .get(`/api/v1/admin/users?phone=${encodeURIComponent(customerUser.phone)}`)
+        .get(
+          `/api/v1/admin/users?phone=${encodeURIComponent(customerUser.phone)}`,
+        )
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(phoneRes.status).toBe(200);
       const phoneItems = phoneRes.body.data.data || phoneRes.body.data.items;
-      expect(phoneItems.some((u: any) => u.phone === customerUser.phone)).toBe(true);
+      expect(phoneItems.some((u: any) => u.phone === customerUser.phone)).toBe(
+        true,
+      );
     });
 
     it("✓ Should allow admin to suspend and reactivate a customer (ACTIVE -> SUSPENDED -> ACTIVE)", async () => {
@@ -535,7 +568,9 @@ describe("Admin Platform Operations (e2e)", () => {
         expect(res.status).toBe(200);
         expect(res.body.data.status).toBe(UserStatus.SUSPENDED);
       } finally {
-        await prisma.user.delete({ where: { id: secondAdmin.id } }).catch(() => null);
+        await prisma.user
+          .delete({ where: { id: secondAdmin.id } })
+          .catch(() => null);
       }
     });
   });
@@ -559,10 +594,16 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(bookingItem.customer.passwordHash).toBeUndefined();
       expect(bookingItem.customer.refreshTokenHash).toBeUndefined();
       expect(bookingItem.provider).toBeDefined();
-      expect(bookingItem.provider.businessName).toBe(providerProfile.businessName);
+      expect(bookingItem.provider.businessName).toBe(
+        providerProfile.businessName,
+      );
       expect(bookingItem.payments).toBeDefined();
       expect(Array.isArray(bookingItem.payments)).toBe(true);
-      expect(bookingItem.payments.some((p: any) => p.status === PaymentStatus.SUCCESS)).toBe(true);
+      expect(
+        bookingItem.payments.some(
+          (p: any) => p.status === PaymentStatus.SUCCESS,
+        ),
+      ).toBe(true);
     });
 
     it("✓ Should filter bookings by status", async () => {
@@ -572,7 +613,9 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(confirmedRes.status).toBe(200);
       const items = confirmedRes.body.data.data || confirmedRes.body.data.items;
-      expect(items.every((b: any) => b.bookingStatus === BookingStatus.CONFIRMED)).toBe(true);
+      expect(
+        items.every((b: any) => b.bookingStatus === BookingStatus.CONFIRMED),
+      ).toBe(true);
       expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
 
       const cancelledRes = await request(app.getHttpServer())
@@ -580,8 +623,11 @@ describe("Admin Platform Operations (e2e)", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(cancelledRes.status).toBe(200);
-      const cancelledItems = cancelledRes.body.data.data || cancelledRes.body.data.items;
-      expect(cancelledItems.some((b: any) => b.id === testBooking.id)).toBe(false);
+      const cancelledItems =
+        cancelledRes.body.data.data || cancelledRes.body.data.items;
+      expect(cancelledItems.some((b: any) => b.id === testBooking.id)).toBe(
+        false,
+      );
     });
 
     it("✓ Should filter bookings by providerId", async () => {
@@ -592,7 +638,9 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
       expect(items.length).toBeGreaterThanOrEqual(1);
-      expect(items.every((b: any) => b.providerId === providerProfile.id)).toBe(true);
+      expect(items.every((b: any) => b.providerId === providerProfile.id)).toBe(
+        true,
+      );
       expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
     });
 
@@ -604,7 +652,9 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
       expect(items.length).toBeGreaterThanOrEqual(1);
-      expect(items.every((b: any) => b.customerId === customerUser.id)).toBe(true);
+      expect(items.every((b: any) => b.customerId === customerUser.id)).toBe(
+        true,
+      );
       expect(items.some((b: any) => b.id === testBooking.id)).toBe(true);
     });
 
@@ -622,8 +672,11 @@ describe("Admin Platform Operations (e2e)", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(refundedRes.status).toBe(200);
-      const refundedItems = refundedRes.body.data.data || refundedRes.body.data.items;
-      expect(refundedItems.some((b: any) => b.id === testBooking.id)).toBe(false);
+      const refundedItems =
+        refundedRes.body.data.data || refundedRes.body.data.items;
+      expect(refundedItems.some((b: any) => b.id === testBooking.id)).toBe(
+        false,
+      );
     });
 
     it("✓ Should filter bookings by date range (dateFrom and dateTo)", async () => {
@@ -673,7 +726,9 @@ describe("Admin Platform Operations (e2e)", () => {
       // Review investigation
       expect(booking.review).toBeDefined();
       expect(booking.review.rating).toBe(5);
-      expect(booking.review.comment).toBe("Outstanding service delivered on time!");
+      expect(booking.review.comment).toBe(
+        "Outstanding service delivered on time!",
+      );
 
       // Notifications list inspection
       expect(Array.isArray(booking.notifications)).toBe(true);
@@ -712,7 +767,9 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(typeof dashboard.users.total).toBe("number");
       expect(typeof dashboard.users.customers).toBe("number");
       expect(typeof dashboard.users.providers).toBe("number");
-      expect(dashboard.users.total).toBe(dashboard.users.customers + dashboard.users.providers);
+      expect(dashboard.users.total).toBe(
+        dashboard.users.customers + dashboard.users.providers,
+      );
       expect(dashboard.users.total).toBeGreaterThanOrEqual(2);
 
       // 2. Providers verification metrics
@@ -754,7 +811,9 @@ describe("Admin Platform Operations (e2e)", () => {
   describe("5. Provider Verification & Operations (/api/v1/admin/providers)", () => {
     it("✓ GET /api/v1/admin/providers should list providers with verificationStatus filter", async () => {
       const res = await request(app.getHttpServer())
-        .get("/api/v1/admin/providers?verificationStatus=PENDING&page=1&limit=10")
+        .get(
+          "/api/v1/admin/providers?verificationStatus=PENDING&page=1&limit=10",
+        )
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
@@ -775,7 +834,9 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.id).toBe(pendingProviderProfile.id);
-      expect(res.body.data.businessName).toBe(pendingProviderProfile.businessName);
+      expect(res.body.data.businessName).toBe(
+        pendingProviderProfile.businessName,
+      );
       expect(Array.isArray(res.body.data.documents)).toBe(true);
       expect(res.body.data.documents.length).toBeGreaterThanOrEqual(1);
     });
@@ -786,7 +847,9 @@ describe("Admin Platform Operations (e2e)", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Only VERIFIED providers can be suspended");
+      expect(res.body.message).toContain(
+        "Only VERIFIED providers can be suspended",
+      );
     });
 
     it("✓ PATCH /api/v1/admin/providers/:id/verify should verify provider, invalidate Redis cache, and log audit event", async () => {
@@ -798,7 +861,9 @@ describe("Admin Platform Operations (e2e)", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.verificationStatus).toBe(VerificationStatus.VERIFIED);
+      expect(res.body.data.verificationStatus).toBe(
+        VerificationStatus.VERIFIED,
+      );
 
       // Verify DB update
       const dbProfile = await prisma.providerProfile.findUnique({
@@ -844,7 +909,9 @@ describe("Admin Platform Operations (e2e)", () => {
         .send({ reason });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.verificationStatus).toBe(VerificationStatus.REJECTED);
+      expect(res.body.data.verificationStatus).toBe(
+        VerificationStatus.REJECTED,
+      );
 
       // Verify DB profile status
       const dbProfile = await prisma.providerProfile.findUnique({
@@ -880,7 +947,9 @@ describe("Admin Platform Operations (e2e)", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.verificationStatus).toBe(VerificationStatus.SUSPENDED);
+      expect(res.body.data.verificationStatus).toBe(
+        VerificationStatus.SUSPENDED,
+      );
 
       // Verify DB update
       const dbProfile = await prisma.providerProfile.findUnique({
@@ -904,8 +973,9 @@ describe("Admin Platform Operations (e2e)", () => {
     });
 
     it("✓ Invariant Check: Suspended provider is omitted from public marketplace search", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/api/v1/providers?page=1&limit=50");
+      const res = await request(app.getHttpServer()).get(
+        "/api/v1/providers?page=1&limit=50",
+      );
 
       expect(res.status).toBe(200);
       const items = res.body.data.items || res.body.data.data;
@@ -969,9 +1039,11 @@ describe("Admin Platform Operations (e2e)", () => {
 
     afterAll(async () => {
       if (pendingPaymentForTest?.id) {
-        await prisma.payment.deleteMany({
-          where: { id: pendingPaymentForTest.id },
-        }).catch(() => null);
+        await prisma.payment
+          .deleteMany({
+            where: { id: pendingPaymentForTest.id },
+          })
+          .catch(() => null);
       }
     });
 
@@ -994,7 +1066,9 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(found.booking.customer.passwordHash).toBeUndefined();
       expect(found.booking.customer.refreshTokenHash).toBeUndefined();
       expect(found.booking.provider).toBeDefined();
-      expect(found.booking.provider.businessName).toBe(providerProfile.businessName);
+      expect(found.booking.provider.businessName).toBe(
+        providerProfile.businessName,
+      );
     });
 
     it("✓ Should filter payments by status=SUCCESS", async () => {
@@ -1004,7 +1078,9 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
-      expect(items.every((p: any) => p.status === PaymentStatus.SUCCESS)).toBe(true);
+      expect(items.every((p: any) => p.status === PaymentStatus.SUCCESS)).toBe(
+        true,
+      );
       expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
     });
 
@@ -1015,7 +1091,9 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
-      expect(items.every((p: any) => p.gateway === PaymentGateway.RAZORPAY)).toBe(true);
+      expect(
+        items.every((p: any) => p.gateway === PaymentGateway.RAZORPAY),
+      ).toBe(true);
       expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
     });
 
@@ -1026,7 +1104,9 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
-      expect(items.every((p: any) => p.bookingId === testBooking.id)).toBe(true);
+      expect(items.every((p: any) => p.bookingId === testBooking.id)).toBe(
+        true,
+      );
       expect(items.some((p: any) => p.id === testPayment.id)).toBe(true);
     });
 
@@ -1107,7 +1187,9 @@ describe("Admin Platform Operations (e2e)", () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Only SUCCESS payments can be refunded");
+      expect(res.body.message).toContain(
+        "Only SUCCESS payments can be refunded",
+      );
     });
 
     it("✓ Should successfully refund a SUCCESS payment and update booking and audit log", async () => {
@@ -1147,6 +1229,161 @@ describe("Admin Platform Operations (e2e)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain("Payment has already been refunded");
+    });
+  });
+
+  // =========================================================================
+  describe("7. Admin Hardening & Audit Trail (/api/v1/admin/audit-logs)", () => {
+    let sampleAuditLogId: string;
+
+    it("✓ Should list platform-wide audit logs with pagination and actorUser info", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/audit-logs?page=1&limit=50")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const data = res.body.data;
+      const items = data.data || data.items;
+      expect(Array.isArray(items)).toBe(true);
+      expect(items.length).toBeGreaterThanOrEqual(1);
+
+      // Save an ID for single get
+      sampleAuditLogId = items[0].id;
+
+      // Verify structure matches Day 7 requirement
+      const sample = items[0];
+      expect(sample).toHaveProperty("id");
+      expect(sample).toHaveProperty("action");
+      expect(sample).toHaveProperty("entityType");
+      expect(sample).toHaveProperty("entityId");
+      expect(sample).toHaveProperty("createdAt");
+      if (sample.actorUser) {
+        expect(sample.actorUser).toHaveProperty("email");
+        expect(sample.actorUser.passwordHash).toBeUndefined();
+      }
+    });
+
+    it("✓ Should filter audit logs by action=PROVIDER_VERIFIED", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/audit-logs?action=${AuditAction.PROVIDER_VERIFIED}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.every((l: any) => l.action === AuditAction.PROVIDER_VERIFIED)).toBe(true);
+      expect(items.some((l: any) => l.entityId === pendingProviderProfile.id)).toBe(true);
+    });
+
+    it("✓ Should filter audit logs by action=PAYMENT_REFUNDED", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/audit-logs?action=${AuditAction.PAYMENT_REFUNDED}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.every((l: any) => l.action === AuditAction.PAYMENT_REFUNDED)).toBe(true);
+      expect(items.some((l: any) => l.entityId === testPayment.id)).toBe(true);
+    });
+
+    it("✓ Should filter audit logs by entityType=User", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/audit-logs?entityType=User")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.every((l: any) => l.entityType === "User")).toBe(true);
+    });
+
+    it("✓ Should filter audit logs by adminId", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/audit-logs?adminId=${adminUser.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.every((l: any) => l.actorUserId === adminUser.id)).toBe(true);
+    });
+
+    it("✓ Should filter audit logs by date range (dateFrom and dateTo)", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/audit-logs?dateFrom=${today}&dateTo=${today}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const items = res.body.data.data || res.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("✓ Should fetch single audit log detail by ID", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/audit-logs/${sampleAuditLogId}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(sampleAuditLogId);
+      expect(res.body.data.action).toBeDefined();
+      expect(res.body.data.entityType).toBeDefined();
+    });
+
+    it("✓ Should return 400 Bad Request for malformed audit log UUID", async () => {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/audit-logs/not-a-valid-uuid")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("✓ Should return 404 Not Found for non-existent audit log UUID", async () => {
+      const nonExistentId = "c0000000-0000-0000-0000-000000000000";
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/audit-logs/${nonExistentId}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("✓ Audit Immutability: Should reject DELETE /api/v1/admin/audit-logs/:id (404 Not Found - Append Only)", async () => {
+      const res = await request(app.getHttpServer())
+        .delete(`/api/v1/admin/audit-logs/${sampleAuditLogId}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("✓ Audit Immutability: Should reject PATCH /api/v1/admin/audit-logs/:id (404 Not Found - Append Only)", async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/admin/audit-logs/${sampleAuditLogId}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ action: "ALTERED" });
+
+      expect(res.status).toBe(404);
+    });
+
+    it("✓ Complete Week 8 Definition of Done: All state changes are auditable with adminId and metadata", async () => {
+      const auditRes = await request(app.getHttpServer())
+        .get("/api/v1/admin/audit-logs?page=1&limit=50")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(auditRes.status).toBe(200);
+      const logs = auditRes.body.data.data || auditRes.body.data.items;
+
+      const actionsPresent = logs.map((l: any) => l.action);
+      expect(actionsPresent).toContain(AuditAction.PROVIDER_VERIFIED);
+      expect(actionsPresent).toContain(AuditAction.PROVIDER_SUSPENDED);
+      expect(actionsPresent).toContain(AuditAction.PAYMENT_REFUNDED);
+
+      // Verify every admin log has actorUserId and timestamps
+      for (const log of logs) {
+        expect(log.id).toBeDefined();
+        expect(log.createdAt).toBeDefined();
+        expect(log.entityType).toBeDefined();
+        expect(log.entityId).toBeDefined();
+      }
     });
   });
 });

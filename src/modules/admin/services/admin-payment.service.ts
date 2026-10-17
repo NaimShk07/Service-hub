@@ -20,7 +20,9 @@ export class AdminPaymentService {
   }
 
   async refund(adminUserId: string, id: string, dto: RefundPaymentDto) {
-    this.logger.log(`Admin ${adminUserId} initiating refund on payment ID: ${id}`);
+    this.logger.log(
+      `Admin ${adminUserId} initiating refund on payment ID: ${id}`,
+    );
     return await this.paymentService.refundPayment(adminUserId, id, dto);
   }
 }

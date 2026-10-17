@@ -17,10 +17,26 @@ export class AdminDashboardService {
 
     const now = new Date();
     const startOfToday = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
     );
     const endOfToday = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999),
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
     );
 
     const [
@@ -96,8 +112,14 @@ export class AdminDashboardService {
       paymentGroups.map((g) => [g.status, g._count.id]),
     );
 
-    const totalBookings = bookingGroups.reduce((acc, g) => acc + g._count.id, 0);
-    const totalProviders = providerGroups.reduce((acc, g) => acc + g._count.id, 0);
+    const totalBookings = bookingGroups.reduce(
+      (acc, g) => acc + g._count.id,
+      0,
+    );
+    const totalProviders = providerGroups.reduce(
+      (acc, g) => acc + g._count.id,
+      0,
+    );
 
     const users = {
       total: totalUsers,

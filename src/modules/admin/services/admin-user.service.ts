@@ -4,15 +4,19 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { Role, UserStatus } from "@prisma-client/enums";
+import { AuditAction, Role, UserStatus } from "@prisma-client/enums";
 import { AdminUserRepository } from "../repositories/admin-user.repository";
 import { QueryAdminUserDto } from "../dto/query-admin-user.dto";
+import { AuditLogRepository } from "@database/repositories/audit-log.repository";
 
 @Injectable()
 export class AdminUserService {
   private readonly logger = new Logger(AdminUserService.name);
 
-  constructor(private readonly adminUserRepository: AdminUserRepository) {}
+  constructor(
+    private readonly adminUserRepository: AdminUserRepository,
+    private readonly auditLogRepository: AuditLogRepository,
+  ) {}
 
   async findAll(queryDto: QueryAdminUserDto) {
     return await this.adminUserRepository.findAllPaginated(queryDto);
@@ -58,6 +62,22 @@ export class AdminUserService {
     this.logger.log(
       `Admin (${adminUserId ?? "system"}) updating user ${id} status from ${existing.status} to ${status}`,
     );
+
+    const action =
+      status === UserStatus.SUSPENDED
+        ? AuditAction.USER_SUSPENDED
+        : AuditAction.USER_STATUS_UPDATED;
+
+    if (adminUserId) {
+      await this.auditLogRepository.create({
+        actorUserId: adminUserId,
+        entityType: "User",
+        entityId: id,
+        action,
+        oldValue: { status: existing.status },
+        newValue: { status },
+      });
+    }
 
     const result = await this.adminUserRepository.updateStatus(id, status);
 

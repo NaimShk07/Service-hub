@@ -626,7 +626,9 @@ export class PaymentService {
     if (dto.amount !== undefined && dto.amount !== null) {
       const refundAmount = Number(dto.amount);
       if (refundAmount <= 0) {
-        throw new BadRequestException("Refund amount must be greater than zero");
+        throw new BadRequestException(
+          "Refund amount must be greater than zero",
+        );
       }
       if (refundAmount > capturedAmount) {
         throw new BadRequestException(
@@ -673,7 +675,7 @@ export class PaymentService {
           actorUserId: adminUserId,
           entityType: "Payment",
           entityId: payment.id,
-          action: AuditAction.PAYMENT_SUCCESS,
+          action: AuditAction.PAYMENT_REFUNDED,
           oldValue: { status: payment.status },
           newValue: {
             status: PaymentStatus.REFUNDED,

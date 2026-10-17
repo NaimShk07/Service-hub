@@ -18,4 +18,3 @@ export class AdminBookingService {
     return await this.bookingService.getBookingByIdForAdmin(id);
   }
 }
-

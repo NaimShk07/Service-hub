@@ -164,28 +164,42 @@ describe("Review Domain (e2e)", () => {
     });
 
     if (testProviderService) {
-      await prisma.providerService.delete({
-        where: { id: testProviderService.id },
-      }).catch(() => null);
+      await prisma.providerService
+        .delete({
+          where: { id: testProviderService.id },
+        })
+        .catch(() => null);
     }
 
     if (testService) {
-      await prisma.service.delete({ where: { id: testService.id } }).catch(() => null);
+      await prisma.service
+        .delete({ where: { id: testService.id } })
+        .catch(() => null);
     }
 
     if (testCategory) {
-      await prisma.category.delete({ where: { id: testCategory.id } }).catch(() => null);
+      await prisma.category
+        .delete({ where: { id: testCategory.id } })
+        .catch(() => null);
     }
 
     if (testProvider) {
-      await prisma.providerProfile.delete({ where: { id: testProvider.id } }).catch(() => null);
+      await prisma.providerProfile
+        .delete({ where: { id: testProvider.id } })
+        .catch(() => null);
     }
 
-    const userIds = [testCustomer?.id, otherCustomer?.id, providerUser?.id].filter(Boolean);
+    const userIds = [
+      testCustomer?.id,
+      otherCustomer?.id,
+      providerUser?.id,
+    ].filter(Boolean);
     if (userIds.length > 0) {
-      await prisma.user.deleteMany({
-        where: { id: { in: userIds } },
-      }).catch(() => null);
+      await prisma.user
+        .deleteMany({
+          where: { id: { in: userIds } },
+        })
+        .catch(() => null);
     }
 
     await prisma.$disconnect();
@@ -352,13 +366,16 @@ describe("Review Domain (e2e)", () => {
         .send({
           bookingId: completedBooking1.id,
           rating: 5,
-          comment: "Punctual and very polite professional. Fixed the AC completely!",
+          comment:
+            "Punctual and very polite professional. Fixed the AC completely!",
         });
 
       expect(res.status).toBe(201);
       const body = res.body.data || res.body;
       expect(body.rating).toBe(5);
-      expect(body.comment).toBe("Punctual and very polite professional. Fixed the AC completely!");
+      expect(body.comment).toBe(
+        "Punctual and very polite professional. Fixed the AC completely!",
+      );
       expect(body.customerId).toBe(testCustomer.id);
       expect(body.providerId).toBe(testProvider.id);
       expect(body.bookingId).toBe(completedBooking1.id);
@@ -637,7 +654,11 @@ describe("Review Domain (e2e)", () => {
       // Prime the Redis cache with mock provider profile data
       await redisService.set(
         cacheKey,
-        JSON.stringify({ id: testProvider.id, averageRating: 4.5, totalReviews: 10 }),
+        JSON.stringify({
+          id: testProvider.id,
+          averageRating: 4.5,
+          totalReviews: 10,
+        }),
         60,
       );
 

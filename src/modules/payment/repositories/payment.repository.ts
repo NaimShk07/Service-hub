@@ -42,7 +42,15 @@ export class PaymentRepository extends BaseRepository {
     page?: number;
     limit?: number;
   }) {
-    const { status, gateway, bookingId, dateFrom, dateTo, page = 1, limit = 10 } = queryDto;
+    const {
+      status,
+      gateway,
+      bookingId,
+      dateFrom,
+      dateTo,
+      page = 1,
+      limit = 10,
+    } = queryDto;
     const skip = (page - 1) * limit;
 
     const where: Prisma.PaymentWhereInput = {

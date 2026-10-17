@@ -161,7 +161,9 @@ describe("Notification Center (e2e)", () => {
 
   describe("GET /api/v1/notifications", () => {
     it("✓ Should reject unauthorized requests (401 Unauthorized)", async () => {
-      const res = await request(app.getHttpServer()).get("/api/v1/notifications");
+      const res = await request(app.getHttpServer()).get(
+        "/api/v1/notifications",
+      );
       expect(res.status).toBe(401);
     });
 
@@ -182,9 +184,13 @@ describe("Notification Center (e2e)", () => {
       expect(ids).not.toContain(otherCustomerNotif.id);
 
       // Verify readAt is exposed in payload
-      const readNotif = items.find((n: any) => n.id === customerNotifAlreadyRead.id);
+      const readNotif = items.find(
+        (n: any) => n.id === customerNotifAlreadyRead.id,
+      );
       expect(readNotif.readAt).toBeDefined();
-      expect(new Date(readNotif.readAt).toISOString()).toBe(originalReadAt.toISOString());
+      expect(new Date(readNotif.readAt).toISOString()).toBe(
+        originalReadAt.toISOString(),
+      );
     });
   });
 
@@ -212,7 +218,9 @@ describe("Notification Center (e2e)", () => {
 
     it("✓ Should reject if notification does not exist (404 Not Found)", async () => {
       const res = await request(app.getHttpServer())
-        .patch("/api/v1/notifications/00000000-0000-0000-0000-000000000000/read")
+        .patch(
+          "/api/v1/notifications/00000000-0000-0000-0000-000000000000/read",
+        )
         .set("Authorization", `Bearer ${customerToken}`);
 
       expect(res.status).toBe(404);
@@ -271,7 +279,9 @@ describe("Notification Center (e2e)", () => {
       const preservedNotif = await prisma.notification.findUnique({
         where: { id: customerNotifAlreadyRead.id },
       });
-      expect(preservedNotif?.readAt?.toISOString()).toBe(originalReadAt.toISOString());
+      expect(preservedNotif?.readAt?.toISOString()).toBe(
+        originalReadAt.toISOString(),
+      );
 
       // Verify other customer's notification remains unread
       const otherNotif = await prisma.notification.findUnique({
