@@ -414,7 +414,65 @@ export class PaymentService {
               break;
             }
 
-            // Update Payment record to SUCCESS (Financial truth)
+            // ⚠️ RACE GUARD & DEADLOCK PREVENTION: Global lock ordering (Bookings -> Payments)
+            // Acquire lock on Booking first, exactly matching BookingService.expireBooking lock order
+            const currentBooking = await this.bookingRepository.findById(
+              payment.bookingId,
+              tx,
+            );
+            const isBookingPending =
+              currentBooking?.bookingStatus === BookingStatus.PENDING_PAYMENT;
+
+            if (isBookingPending) {
+              await this.bookingRepository.updateStatus(
+                payment.bookingId,
+                BookingStatus.CONFIRMED,
+                undefined,
+                tx,
+              );
+
+              await this.auditLogRepository.create(
+                {
+                  actorUserId: payment.booking.customerId,
+                  entityType: "Booking",
+                  entityId: payment.bookingId,
+                  action: AuditAction.BOOKING_CONFIRMED,
+                  oldValue: { status: currentBooking.bookingStatus },
+                  newValue: {
+                    status: BookingStatus.CONFIRMED,
+                    source: "webhook",
+                  },
+                },
+                tx,
+              );
+              this.logger.log(
+                `Booking "${payment.bookingId}" CONFIRMED via webhook`,
+              );
+
+              confirmedBookingId = payment.bookingId;
+            } else {
+              // 🛡️ Booking was already EXPIRED or CANCELLED! Do NOT resurrect it.
+              this.logger.error(
+                `CRITICAL: Payment ${payment.id} captured for booking ${payment.bookingId}, but booking status is "${currentBooking?.bookingStatus}". Flagged for refund.`,
+              );
+              await this.auditLogRepository.create(
+                {
+                  actorUserId: payment.booking.customerId,
+                  entityType: "Booking",
+                  entityId: payment.bookingId,
+                  action: AuditAction.PAYMENT_SUCCESS,
+                  oldValue: { status: currentBooking?.bookingStatus },
+                  newValue: {
+                    status: currentBooking?.bookingStatus,
+                    flag: "REQUIRES_REFUND",
+                    reason: `Payment succeeded after booking was ${currentBooking?.bookingStatus}`,
+                  },
+                },
+                tx,
+              );
+            }
+
+            // Update Payment record to SUCCESS (Financial truth) SECOND
             await this.paymentRepository.updateStatus(
               payment.id,
               PaymentStatus.SUCCESS,
@@ -436,58 +494,6 @@ export class PaymentService {
               },
               tx,
             );
-
-            // ⚠️ RACE GUARD: Check if booking is still PENDING_PAYMENT
-            if (
-              payment.booking.bookingStatus === BookingStatus.PENDING_PAYMENT
-            ) {
-              await this.bookingRepository.updateStatus(
-                payment.bookingId,
-                BookingStatus.CONFIRMED,
-                undefined,
-                tx,
-              );
-
-              await this.auditLogRepository.create(
-                {
-                  actorUserId: payment.booking.customerId,
-                  entityType: "Booking",
-                  entityId: payment.bookingId,
-                  action: AuditAction.BOOKING_CONFIRMED,
-                  oldValue: { status: payment.booking.bookingStatus },
-                  newValue: {
-                    status: BookingStatus.CONFIRMED,
-                    source: "webhook",
-                  },
-                },
-                tx,
-              );
-              this.logger.log(
-                `Booking "${payment.bookingId}" CONFIRMED via webhook`,
-              );
-
-              confirmedBookingId = payment.bookingId;
-            } else {
-              // 🛡️ Booking was already EXPIRED or CANCELLED! Do NOT resurrect it.
-              this.logger.error(
-                `CRITICAL: Payment ${payment.id} captured for booking ${payment.bookingId}, but booking status is "${payment.booking.bookingStatus}". Flagged for refund.`,
-              );
-              await this.auditLogRepository.create(
-                {
-                  actorUserId: payment.booking.customerId,
-                  entityType: "Booking",
-                  entityId: payment.bookingId,
-                  action: AuditAction.PAYMENT_SUCCESS,
-                  oldValue: { status: payment.booking.bookingStatus },
-                  newValue: {
-                    status: payment.booking.bookingStatus,
-                    flag: "REQUIRES_REFUND",
-                    reason: `Payment succeeded after booking was ${payment.booking.bookingStatus}`,
-                  },
-                },
-                tx,
-              );
-            }
             break;
           }
           case "payment.failed": {

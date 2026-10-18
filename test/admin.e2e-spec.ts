@@ -660,7 +660,7 @@ describe("Admin Platform Operations (e2e)", () => {
 
     it("✓ Should filter bookings by paymentStatus", async () => {
       const successRes = await request(app.getHttpServer())
-        .get(`/api/v1/admin/bookings?paymentStatus=${PaymentStatus.SUCCESS}`)
+        .get(`/api/v1/admin/bookings?paymentStatus=${PaymentStatus.SUCCESS}&customerId=${customerUser.id}`)
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(successRes.status).toBe(200);
