@@ -75,22 +75,29 @@ export class NotificationProcessor extends WorkerHost {
       return { delivered: true, alreadyProcessed: true };
     }
 
-    // 2. Pre-condition Check: If reminder, check if booking is CANCELLED
+    // 2. Pre-condition Check: If reminder, check if booking is CANCELLED or EXPIRED
     if (bookingId && job.name.startsWith("reminder.")) {
       const booking = await this.prisma.booking.findUnique({
         where: { id: bookingId },
       });
 
-      if (booking && booking.bookingStatus === BookingStatus.CANCELLED) {
+      if (
+        booking &&
+        (booking.bookingStatus === BookingStatus.CANCELLED ||
+          booking.bookingStatus === BookingStatus.EXPIRED)
+      ) {
         this.logger.log(
-          `Booking "${bookingId}" is CANCELLED. Skipping reminder delivery for job [${job.id}].`,
+          `Booking "${bookingId}" is ${booking.bookingStatus}. Skipping reminder delivery for job [${job.id}].`,
         );
         if (notification) {
           await this.prisma.notification.delete({
             where: { id: notification.id },
           });
         }
-        return { delivered: false, reason: "booking_cancelled" };
+        return {
+          delivered: false,
+          reason: `booking_${booking.bookingStatus.toLowerCase()}`,
+        };
       }
     }
 

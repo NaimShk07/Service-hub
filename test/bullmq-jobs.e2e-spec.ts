@@ -460,6 +460,136 @@ describe("Day 7: BullMQ, Notifications, Reservation Expiration & Concurrency (e2
       expect(finalRecord?.failedAt).toBeDefined();
       expect(finalRecord?.failureReason).toBe("Permanent DNS Error");
     });
+
+    it("✓ Reminder for an EXPIRED booking is suppressed without delivering email", async () => {
+      const { booking } = await createTestBooking(
+        BookingStatus.EXPIRED,
+        new Date(Date.now() + 86400000),
+        new Date(Date.now() + 86400000 + 3600000),
+      );
+
+      const notification = await prisma.notification.create({
+        data: {
+          userId: testCustomer.id,
+          bookingId: booking.id,
+          type: NotificationType.REMINDER,
+          channel: NotificationChannel.EMAIL,
+          title: "Tomorrow's Service",
+          body: "Your booking is tomorrow",
+          scheduledFor: new Date(),
+          status: NotificationStatus.PENDING,
+        },
+      });
+
+      const sendEmailSpy = jest.spyOn(emailService, "sendEmail");
+      sendEmailSpy.mockClear();
+
+      const mockJob = {
+        id: `test_expired_${Date.now()}`,
+        name: "reminder.24h",
+        data: {
+          notificationId: notification.id,
+          userId: testCustomer.id,
+          bookingId: booking.id,
+          type: NotificationType.REMINDER,
+          channel: NotificationChannel.EMAIL,
+          title: "Tomorrow's Service",
+          body: "Your booking is tomorrow",
+        },
+        attemptsMade: 0,
+        timestamp: Date.now(),
+      } as unknown as Job;
+
+      const result = await notificationProcessor.process(mockJob);
+
+      expect(result.delivered).toBe(false);
+      expect(result.reason).toBe("booking_expired");
+      expect(sendEmailSpy).not.toHaveBeenCalled();
+
+      // Pending notification record is removed
+      const inDb = await prisma.notification.findUnique({
+        where: { id: notification.id },
+      });
+      expect(inDb).toBeNull();
+    });
+
+    it("✓ Duplicate queue submissions with same deterministic jobId do not send duplicate notifications", async () => {
+      const customJobId = `dedup_test_${Date.now()}`;
+
+      // Submit first job
+      const job1 = await notificationQueueService.sendNotification(
+        "booking.confirmation",
+        {
+          userId: testCustomer.id,
+          type: NotificationType.BOOKING_CONFIRMED,
+          channel: NotificationChannel.EMAIL,
+          title: "Dedup Test",
+          body: "Testing deduplication",
+        },
+        5000,
+        customJobId,
+      );
+
+      // Submit identical second job with same deterministic jobId
+      const job2 = await notificationQueueService.sendNotification(
+        "booking.confirmation",
+        {
+          userId: testCustomer.id,
+          type: NotificationType.BOOKING_CONFIRMED,
+          channel: NotificationChannel.EMAIL,
+          title: "Dedup Test",
+          body: "Testing deduplication",
+        },
+        5000,
+        customJobId,
+      );
+
+      // BullMQ reuses the same job instance (deterministic idempotency)
+      expect(job1.id).toBe(customJobId);
+      expect(job2.id).toBe(customJobId);
+
+      // Cleanup
+      await job1.remove();
+    });
+
+    it("✓ Already SENT notification is idempotently skipped if re-processed (Worker restart / duplicate delivery)", async () => {
+      const notification = await prisma.notification.create({
+        data: {
+          userId: testCustomer.id,
+          type: NotificationType.BOOKING_CONFIRMED,
+          channel: NotificationChannel.EMAIL,
+          title: "Already Sent",
+          body: "Duplicate delivery protection",
+          scheduledFor: new Date(),
+          status: NotificationStatus.SENT,
+          sentAt: new Date(),
+        },
+      });
+
+      const sendEmailSpy = jest.spyOn(emailService, "sendEmail");
+      sendEmailSpy.mockClear();
+
+      const mockJob = {
+        id: `test_reprocess_${Date.now()}`,
+        name: "booking.confirmation",
+        data: {
+          notificationId: notification.id,
+          userId: testCustomer.id,
+          type: NotificationType.BOOKING_CONFIRMED,
+          channel: NotificationChannel.EMAIL,
+          title: "Already Sent",
+          body: "Duplicate delivery protection",
+        },
+        attemptsMade: 1,
+        timestamp: Date.now(),
+      } as unknown as Job;
+
+      const result = await notificationProcessor.process(mockJob);
+
+      expect(result.delivered).toBe(true);
+      expect(result.alreadyProcessed).toBe(true);
+      expect(sendEmailSpy).not.toHaveBeenCalled();
+    });
   });
 
   // =========================================================================
