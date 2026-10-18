@@ -14,6 +14,7 @@ import {
   NotificationType,
 } from "@prisma-client/enums";
 import { PrismaService } from "@database/prisma/prisma.service";
+import { getRequestId } from "@common/logging/request-context";
 
 @Injectable()
 export class NotificationQueueService {
@@ -61,8 +62,13 @@ export class NotificationQueueService {
     // 2. Enqueue BullMQ Job with notificationId
     return await this.notificationQueue.add(
       jobName,
-      { ...data, notificationId },
       {
+        ...data,
+        notificationId,
+        requestId: data.requestId || getRequestId(),
+      },
+      {
+
         delay: delayMs,
         jobId, // Custom jobId enforces deduplication if same notification is scheduled twice!
         ...DEFAULT_RETRY_POLICY,

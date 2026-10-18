@@ -10,6 +10,7 @@ import {
   NotificationStatus,
 } from "@prisma-client/enums";
 import { EmailService } from "@shared/mailer/email.service";
+import { requestContext } from "@common/logging/request-context";
 
 @Processor(QUEUE_NOTIFICATION, {
   concurrency: 5,
@@ -25,13 +26,17 @@ export class NotificationProcessor extends WorkerHost {
   }
 
   async process(job: Job<SendNotificationJobPayload>): Promise<any> {
-    const startTime = Date.now();
+    const requestId = (job.data as any).requestId || `job_${job.id}`;
     const { notificationId, userId, bookingId, type, channel, title, body } =
       job.data;
 
-    this.logger.log(
-      `[notification] job started jobId=${job.id} name=${job.name} (Attempt ${job.attemptsMade + 1}) for user ${userId}`,
-    );
+    return requestContext.run({ requestId, userId }, async () => {
+      const startTime = Date.now();
+
+      this.logger.log(
+        `[notification] job started jobId=${job.id} name=${job.name} (Attempt ${job.attemptsMade + 1}) for user ${userId}`,
+      );
+
 
     // 1. Load Notification record
     let notification = notificationId
@@ -159,6 +164,7 @@ export class NotificationProcessor extends WorkerHost {
 
       throw error; // Re-throw triggers BullMQ exponential backoff!
     }
+    });
   }
 
   /**
@@ -171,25 +177,30 @@ export class NotificationProcessor extends WorkerHost {
   ) {
     if (!job) return;
 
-    const maxAttempts = job.opts.attempts || 3;
+    const requestId = (job.data as any).requestId || `job_${job.id}`;
+    const userId = job.data?.userId;
 
-    if (job.attemptsMade >= maxAttempts) {
-      this.logger.error(
-        `🚨 PERMANENT FAILURE: Notification job [${job.id}] "${job.name}" exhausted all ${job.attemptsMade} retries. Reason: ${error.message}`,
-      );
+    return requestContext.run({ requestId, userId }, async () => {
+      const maxAttempts = job.opts.attempts || 3;
 
-      const notificationId = job.data.notificationId;
-      if (notificationId) {
-        await this.prisma.notification.updateMany({
-          where: { id: notificationId },
-          data: {
-            status: NotificationStatus.FAILED,
-            failedAt: new Date(),
-            failureReason: error.message,
-            attemptCount: job.attemptsMade,
-          },
-        });
+      if (job.attemptsMade >= maxAttempts) {
+        this.logger.error(
+          `🚨 PERMANENT FAILURE: Notification job [${job.id}] "${job.name}" exhausted all ${job.attemptsMade} retries. Reason: ${error.message}`,
+        );
+
+        const notificationId = job.data.notificationId;
+        if (notificationId) {
+          await this.prisma.notification.updateMany({
+            where: { id: notificationId },
+            data: {
+              status: NotificationStatus.FAILED,
+              failedAt: new Date(),
+              failureReason: error.message,
+              attemptCount: job.attemptsMade,
+            },
+          });
+        }
       }
-    }
+    });
   }
 }

@@ -10,8 +10,13 @@ import { LoggingInterceptor } from "@common/interceptors/logging.interceptor";
 import helmet from "helmet";
 import { PrismaClientExceptionFilter } from "@common/filters/prisma-client-exception.filter";
 
+import { AppLogger } from "@common/logging/app.logger";
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    logger: new AppLogger(),
+  });
   const configService = app.get(ConfigService);
 
   // Helmet
@@ -20,8 +25,11 @@ async function bootstrap() {
   // Cookie
   app.use(cookieParser());
 
-  // Global prefix
-  app.setGlobalPrefix("api/v1");
+  // Global prefix with health endpoints accessible at both root and prefix
+  app.setGlobalPrefix("api/v1", {
+    exclude: ["health", "health/(.*)", "api/v1/health", "api/v1/health/(.*)"],
+  });
+
 
   // Enable CORS
   const cors = configService.get<{

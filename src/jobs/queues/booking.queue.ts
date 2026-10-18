@@ -12,6 +12,7 @@ import {
   ProcessNoShowJobPayload,
 } from "../jobs/booking.jobs";
 import { PrismaService } from "@database/prisma/prisma.service";
+import { getRequestId } from "@common/logging/request-context";
 
 @Injectable()
 export class BookingQueueService {
@@ -39,6 +40,7 @@ export class BookingQueueService {
       {
         bookingId,
         expectedPaymentExpiresAt: new Date(Date.now() + delayMs).toISOString(),
+        requestId: getRequestId(),
       },
       {
         jobId, // Enforces exact-once scheduling per booking!
@@ -98,8 +100,9 @@ export class BookingQueueService {
 
     return await this.bookingQueue.add(
       BOOKING_JOBS.PROCESS_NO_SHOW,
-      { bookingId },
+      { bookingId, requestId: getRequestId() },
       {
+
         jobId,
         delay: delayMs,
         ...DEFAULT_RETRY_POLICY,

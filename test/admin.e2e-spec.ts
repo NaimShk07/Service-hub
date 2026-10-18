@@ -608,8 +608,13 @@ describe("Admin Platform Operations (e2e)", () => {
 
     it("✓ Should filter bookings by status", async () => {
       const confirmedRes = await request(app.getHttpServer())
-        .get(`/api/v1/admin/bookings?status=${BookingStatus.CONFIRMED}`)
+        .get(
+          `/api/v1/admin/bookings?status=${BookingStatus.CONFIRMED}&customerId=${testBooking.customerId}`,
+        )
         .set("Authorization", `Bearer ${adminToken}`);
+
+
+
 
       expect(confirmedRes.status).toBe(200);
       const items = confirmedRes.body.data.data || confirmedRes.body.data.items;

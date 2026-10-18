@@ -8,6 +8,8 @@ import {
 } from "../jobs/booking.jobs";
 import { BookingService } from "@modules/booking/services/booking.service";
 
+import { requestContext } from "@common/logging/request-context";
+
 @Processor(QUEUE_BOOKING, {
   concurrency: 2, // Low concurrency for state transitions to avoid lock contention
 })
@@ -24,36 +26,41 @@ export class BookingProcessor extends WorkerHost {
   async process(
     job: Job<ExpirePaymentJobPayload | ProcessNoShowJobPayload>,
   ): Promise<any> {
-    const startTime = Date.now();
-    this.logger.log(
-      `Processing booking job [${job.id}] "${job.name}" for booking ${job.data.bookingId}`,
-    );
+    const requestId = (job.data as any).requestId || `job_${job.id}`;
 
-    try {
-      let result: any;
-      if (job.name === BOOKING_JOBS.EXPIRE_PAYMENT) {
-        result = await this.bookingService.expireBooking(job.data.bookingId);
-      } else if (job.name === BOOKING_JOBS.PROCESS_NO_SHOW) {
-        result = await this.bookingService.flagOverdueBooking(
-          job.data.bookingId,
-        );
-      } else {
-        this.logger.warn(`[booking] unhandled job name: "${job.name}"`);
-        result = { skipped: true, reason: "unknown_job" };
-      }
-
-      const duration = Date.now() - startTime;
+    return requestContext.run({ requestId }, async () => {
+      const startTime = Date.now();
       this.logger.log(
-        `[booking] job completed jobId=${job.id} duration=${duration}ms`,
+        `Processing booking job [${job.id}] "${job.name}" for booking ${job.data.bookingId}`,
       );
-      return result;
-    } catch (error: any) {
-      const duration = Date.now() - startTime;
 
-      this.logger.error(
-        `[booking] job failed jobId=${job.id} attempt=${job.attemptsMade + 1} duration=${duration}ms error=${error.message}`,
-      );
-      throw error;
-    }
+      try {
+        let result: any;
+        if (job.name === BOOKING_JOBS.EXPIRE_PAYMENT) {
+          result = await this.bookingService.expireBooking(job.data.bookingId);
+        } else if (job.name === BOOKING_JOBS.PROCESS_NO_SHOW) {
+          result = await this.bookingService.flagOverdueBooking(
+            job.data.bookingId,
+          );
+        } else {
+          this.logger.warn(`[booking] unhandled job name: "${job.name}"`);
+          result = { skipped: true, reason: "unknown_job" };
+        }
+
+        const duration = Date.now() - startTime;
+        this.logger.log(
+          `[booking] job completed jobId=${job.id} duration=${duration}ms`,
+        );
+        return result;
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+
+        this.logger.error(
+          `[booking] job failed jobId=${job.id} attempt=${job.attemptsMade + 1} duration=${duration}ms error=${error.message}`,
+        );
+        throw error;
+      }
+    });
   }
 }
+

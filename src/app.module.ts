@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -20,6 +20,7 @@ import { PaymentModule } from "@modules/payment/payment.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { NotificationModule } from "@modules/notification/notification.module";
 import { ReviewModule } from "@modules/review/review.module";
+import { RequestIdMiddleware } from "@common/middleware/request-id.middleware";
 
 @Module({
   imports: [
@@ -66,4 +67,9 @@ import { ReviewModule } from "@modules/review/review.module";
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestIdMiddleware).forRoutes("*");
+  }
+}
+

@@ -6,6 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { tap } from "rxjs";
+import { setRequestUserId } from "../logging/request-context";
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -20,14 +21,32 @@ export class LoggingInterceptor implements NestInterceptor {
       tap({
         next: () => {
           const duration = Date.now() - startTime;
-          this.logger.log(
-            `${request.method} ${request.url} ${response.statusCode} - ${duration}ms`,
-          );
+          if (request.user?.id) {
+            setRequestUserId(request.user.id);
+          }
+          this.logger.log(`${request.method} ${request.url} completed`, {
+            method: request.method,
+            url: request.url,
+            statusCode: response.statusCode,
+            durationMs: duration,
+            userId: request.user?.id,
+          });
         },
         error: (error) => {
           const duration = Date.now() - startTime;
+          if (request.user?.id) {
+            setRequestUserId(request.user.id);
+          }
           this.logger.error(
-            `${request.method} ${request.url} ${response.statusCode || 500} - ${duration}ms`,
+            `${request.method} ${request.url} failed: ${error?.message || "Unknown error"}`,
+            {
+              method: request.method,
+              url: request.url,
+              statusCode: error?.status || response.statusCode || 500,
+              durationMs: duration,
+              userId: request.user?.id,
+              error: error?.message,
+            },
           );
         },
       }),

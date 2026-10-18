@@ -22,9 +22,16 @@ export class TransformInterceptor<T>
   intercept(
     context: ExecutionContext,
     next: CallHandler<T>,
-  ): Observable<ApiResponse<T>> {
+  ): Observable<ApiResponse<T> | T> {
+    const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse<ExpressResponse>();
     const statusCode = response.statusCode;
+
+    // Preserve standard health check probe payloads for k8s and infrastructure monitors
+    if (request.url?.includes("/health")) {
+      return next.handle();
+    }
+
     return next.handle().pipe(
       map((data: T) => ({
         statusCode,
@@ -34,4 +41,5 @@ export class TransformInterceptor<T>
       })),
     );
   }
+
 }
