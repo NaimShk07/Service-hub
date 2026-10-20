@@ -5,4 +5,7 @@ export abstract class StorageService {
   ): Promise<string>;
 
   abstract deleteFile(fileUrl: string): Promise<void>;
+
+  abstract getFilePath(fileUrl: string): string;
 }
+

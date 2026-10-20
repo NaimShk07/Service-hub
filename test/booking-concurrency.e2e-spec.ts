@@ -14,6 +14,7 @@ import {
   VerificationStatus,
 } from "../generated/prisma/client";
 import { canTransitionBooking } from "../src/modules/booking/domain/booking-state-machine";
+import { ThrottlerGuard } from "@nestjs/throttler";
 
 describe("Day 7: Booking Concurrency, Validation & State Invariants (e2e)", () => {
   let app: INestApplication;
@@ -42,6 +43,8 @@ describe("Day 7: Booking Concurrency, Validation & State Invariants (e2e)", () =
   const testCustomer3Email = "day7_customer3@example.com";
 
   beforeAll(async () => {
+    jest.spyOn(ThrottlerGuard.prototype, "canActivate").mockResolvedValue(true);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();

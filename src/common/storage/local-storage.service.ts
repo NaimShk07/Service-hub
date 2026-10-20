@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { v4 as uuid } from "uuid";
@@ -8,35 +8,44 @@ import { StorageService } from "./storage.service";
 @Injectable()
 export class LocalStorageService implements StorageService {
   private readonly logger = new Logger(LocalStorageService.name);
-  private readonly uploadRoot = path.join(process.cwd(), "uploads");
+  private readonly uploadRoot = path.resolve(process.cwd(), "uploads");
 
   async uploadFile(file: Express.Multer.File, folder: string): Promise<string> {
     this.logger.log(
       `Uploading file "${file.originalname}" to folder "${folder}"`,
     );
-    const uploadDir = path.join(this.uploadRoot, folder);
+
+    // Sanitize folder and filename against directory traversal attacks
+    const safeFolder = path.basename(folder);
+    const uploadDir = path.resolve(this.uploadRoot, safeFolder);
+
+    // Verify upload directory is strictly within uploadRoot
+    if (!uploadDir.startsWith(this.uploadRoot)) {
+      throw new BadRequestException("Invalid upload folder path");
+    }
 
     // Make sure directory exists
     await fs.mkdir(uploadDir, { recursive: true });
 
-    // Generate unique filename
-    const filename = `${uuid()}-${file.originalname}`;
+    // Sanitize filename
+    const safeOriginalName = path
+      .basename(file.originalname)
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filename = `${uuid()}-${safeOriginalName}`;
 
     const filePath = path.join(uploadDir, filename);
 
     // Write buffer to disk
     await fs.writeFile(filePath, file.buffer);
 
-    const relativeUrl = `/uploads/${folder}/${filename}`;
+    const relativeUrl = `/uploads/${safeFolder}/${filename}`;
     this.logger.log(`File successfully saved to "${relativeUrl}"`);
     return relativeUrl;
   }
 
   async deleteFile(fileUrl: string): Promise<void> {
     this.logger.log(`Deleting file: ${fileUrl}`);
-    const relativePath = fileUrl.replace(/^\/uploads\//, "");
-
-    const filePath = path.join(this.uploadRoot, relativePath);
+    const filePath = this.getFilePath(fileUrl);
 
     try {
       await fs.unlink(filePath);
@@ -51,4 +60,17 @@ export class LocalStorageService implements StorageService {
       }
     }
   }
+
+  getFilePath(fileUrl: string): string {
+    const relativePath = fileUrl.replace(/^\/uploads\//, "");
+    const resolvedPath = path.resolve(this.uploadRoot, relativePath);
+
+    // Guard against directory traversal attacks
+    if (!resolvedPath.startsWith(this.uploadRoot)) {
+      throw new BadRequestException("Invalid file path: path traversal detected");
+    }
+
+    return resolvedPath;
+  }
 }
+

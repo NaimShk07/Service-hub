@@ -16,6 +16,7 @@ import { QueryBookingsDto } from "../dto/query-booking.dto";
 import { CancelBookingDto } from "../dto/cancel-booking.dto";
 import { Role } from "@prisma-client/enums";
 import { Auth } from "@common/decorators/auth.decorator";
+import { Throttle } from "@nestjs/throttler";
 
 @ApiTags("Bookings")
 @Controller("bookings")
@@ -26,6 +27,7 @@ export class BookingController {
   /**
    * Create a new booking (starts in PENDING_PAYMENT status)
    */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post()
   async createBooking(
     @CurrentUser("userId") customerId: string,
@@ -33,6 +35,7 @@ export class BookingController {
   ) {
     return this.bookingService.createBooking(customerId, dto);
   }
+
 
   /**
    * Get my bookings (with status/date filters and pagination)

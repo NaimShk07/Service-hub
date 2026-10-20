@@ -31,9 +31,10 @@ import { RequestIdMiddleware } from "@common/middleware/request-id.middleware";
       cache: true,
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), "uploads"),
-      serveRoot: "/uploads",
+      rootPath: join(process.cwd(), "uploads", "public"),
+      serveRoot: "/uploads/public",
     }),
+
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

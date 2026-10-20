@@ -1,9 +1,13 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { Role } from "@prisma-client/enums";
+import * as path from "path";
+
 import { ProviderRepository } from "../repositories/provider.repository";
 import { CreateProviderDto } from "../dto/create-provider.dto";
 import { UpdateProviderDto } from "../dto/update-provider.dto";
@@ -154,6 +158,50 @@ export class ProviderService {
 
     return await this.documentRepository.findDocumentsByProviderId(providerId);
   }
+
+  async getOwnDocuments(userId: string) {
+    const provider = await this.providerRepository.findByUserId(userId);
+    if (!provider) {
+      throw new NotFoundException("Provider profile not found for user");
+    }
+
+    return await this.documentRepository.findDocumentsByProviderId(provider.id);
+  }
+
+  async getDocumentFileForUser(
+    documentId: string,
+    userId: string,
+    role: Role,
+  ): Promise<{ filePath: string; mimeType: string }> {
+    const doc = await this.documentRepository.findDocumentById(documentId);
+    if (!doc) {
+      throw new NotFoundException(`Document "${documentId}" not found`);
+    }
+
+    // Role check: must be ADMIN or the owner of the provider profile
+    if (role !== Role.ADMIN) {
+      const provider = await this.providerRepository.findById(doc.providerId);
+      if (!provider || provider.userId !== userId) {
+        throw new ForbiddenException(
+          "You do not have permission to access this document",
+        );
+      }
+    }
+
+    const filePath = this.storageService.getFilePath(doc.fileUrl);
+
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      ".pdf": "application/pdf",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+    };
+    const mimeType = mimeMap[ext] || "application/octet-stream";
+
+    return { filePath, mimeType };
+  }
+
 
   async getPublicProfileById(providerId: string) {
     return await this.redisService.getOrSet(

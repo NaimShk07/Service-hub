@@ -10,9 +10,12 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
+import { Response } from "express";
+import { Throttle } from "@nestjs/throttler";
 import { ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
 import { ProviderService } from "../services/provider.service";
 import { CreateProviderDto } from "../dto/create-provider.dto";
@@ -27,6 +30,7 @@ import { ProviderAvailabilityService } from "../services/provider-availability.s
 import { QuerySlotDto } from "../dto/query-slot.dto";
 import { QueryProviderSearchDto } from "../dto/query-provider-search.dto";
 import { Auth } from "@common/decorators/auth.decorator";
+
 
 @ApiTags("Providers")
 @Controller("")
@@ -81,6 +85,7 @@ export class ProviderController {
   /**
    * Upload provider document
    */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post("me/provider/documents")
   @Auth()
   @UseInterceptors(FileInterceptor("file"))
@@ -107,13 +112,46 @@ export class ProviderController {
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: /(jpg|jpeg|png|pdf)$/ }),
+          new FileTypeValidator({
+            fileType: /(jpg|jpeg|png|pdf)$/,
+            fallbackToMimetype: true,
+          }),
         ],
       }),
     )
     file: Express.Multer.File,
   ) {
     return await this.providerService.uploadDocument(userId, dto, file);
+  }
+
+  /**
+   * Get own uploaded documents
+   */
+  @Get("me/provider/documents")
+  @Auth()
+  async getOwnDocuments(@CurrentUser("userId") userId: string) {
+    return await this.providerService.getOwnDocuments(userId);
+  }
+
+  /**
+   * Securely view or download a provider document file (Owner or Admin only)
+   */
+  @Get("provider/documents/:id/file")
+  @Auth()
+  async downloadDocument(
+    @Param("id", new ParseUUIDPipe()) documentId: string,
+    @CurrentUser() user: { userId: string; role: Role },
+    @Res() res: Response,
+  ) {
+    const { filePath, mimeType } =
+      await this.providerService.getDocumentFileForUser(
+        documentId,
+        user.userId,
+        user.role,
+      );
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.sendFile(filePath);
   }
 
   /**
@@ -126,6 +164,7 @@ export class ProviderController {
   ) {
     return await this.providerService.getProviderDocumentsForAdmin(providerId);
   }
+
 
   /**
    * Get paginated summary list of verified providers

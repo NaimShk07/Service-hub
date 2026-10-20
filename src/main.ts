@@ -11,6 +11,7 @@ import helmet from "helmet";
 import { PrismaClientExceptionFilter } from "@common/filters/prisma-client-exception.filter";
 
 import { AppLogger } from "@common/logging/app.logger";
+import { TimeoutInterceptor } from "@common/interceptors/timeout.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -19,10 +20,13 @@ async function bootstrap() {
   });
   const configService = app.get(ConfigService);
 
-  // Helmet
+  // Enable graceful shutdown lifecycle hooks (SIGTERM, SIGINT)
+  app.enableShutdownHooks();
+
+  // Helmet Security Headers
   app.use(helmet());
 
-  // Cookie
+  // Cookie Parser
   app.use(cookieParser());
 
   // Global prefix with health endpoints accessible at both root and prefix
@@ -30,8 +34,7 @@ async function bootstrap() {
     exclude: ["health", "health/(.*)", "api/v1/health", "api/v1/health/(.*)"],
   });
 
-
-  // Enable CORS
+  // Enable CORS with constrained origins and exposed correlation headers
   const cors = configService.get<{
     origins: string[];
     credentials: boolean;
@@ -40,9 +43,18 @@ async function bootstrap() {
   app.enableCors({
     origin: cors?.origins.length ? cors.origins : false,
     credentials: cors?.credentials ?? false,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Request-ID",
+      "x-razorpay-signature",
+      "x-razorpay-event-id",
+    ],
+    exposedHeaders: ["X-Request-ID"],
   });
 
-  // Global Validation Pipe
+  // Global Validation Pipe with strict unexpected property rejection
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -54,27 +66,42 @@ async function bootstrap() {
     }),
   );
 
-  // Global Exception Filter & Response Interceptor
+  // Global Exception Filters & Response Interceptors
   app.useGlobalFilters(
     new HttpExceptionFilter(),
     new PrismaClientExceptionFilter(),
   );
-  app.useGlobalInterceptors(new TransformInterceptor());
-  app.useGlobalInterceptors(new LoggingInterceptor());
+  app.useGlobalInterceptors(
+    new TimeoutInterceptor(30000),
+    new TransformInterceptor(),
+    new LoggingInterceptor(),
+  );
 
-  // Swagger OpenAPI Documentation Setup
-  const config = new DocumentBuilder()
-    .setTitle("ServiceHub API")
-    .setDescription("ServiceHub Backend REST API Documentation")
-    .setVersion("1.0")
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("api/docs", app, document);
+  // Swagger OpenAPI Documentation Setup (disabled in production unless explicitly toggled)
+  const isProduction =
+    configService.get<string>("app.nodeEnv") === "production" ||
+    process.env.NODE_ENV === "production";
+  const swaggerEnabled =
+    configService.get<string>("SWAGGER_ENABLED") === "true" ||
+    process.env.SWAGGER_ENABLED === "true";
+
+  if (!isProduction || swaggerEnabled) {
+    const config = new DocumentBuilder()
+      .setTitle("ServiceHub API")
+      .setDescription("ServiceHub Backend REST API Documentation")
+      .setVersion("1.0")
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup("api/docs", app, document);
+  }
 
   const port = configService.get<number>("app.port", 3000);
   await app.listen(port);
   console.log(`🚀 Application running on: http://localhost:${port}/api/v1`);
-  console.log(`📚 Swagger documentation at: http://localhost:${port}/api/docs`);
+  if (!isProduction || swaggerEnabled) {
+    console.log(`📚 Swagger documentation at: http://localhost:${port}/api/docs`);
+  }
 }
 void bootstrap();
+

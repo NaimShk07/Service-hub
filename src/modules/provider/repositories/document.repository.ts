@@ -27,4 +27,11 @@ export class DocumentRepository {
       where: { providerId },
     });
   }
+
+  async findDocumentById(id: string) {
+    return await this.prisma.providerDocument.findUnique({
+      where: { id },
+    });
+  }
 }
+

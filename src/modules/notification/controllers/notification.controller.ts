@@ -4,10 +4,12 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Request,
   UseGuards,
 } from "@nestjs/common";
+
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
 import { NotificationService } from "../services/notification.service";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
@@ -38,9 +40,10 @@ export class NotificationController {
   @Patch(":id/read")
   @HttpCode(HttpStatus.OK)
   async markRead(
-    @Param("id") id: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
     @CurrentUser("userId") userId: string,
   ) {
     return await this.notificationService.markAsRead(id, userId);
   }
+
 }

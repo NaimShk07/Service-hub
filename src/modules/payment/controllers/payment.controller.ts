@@ -20,6 +20,7 @@ import { Request } from "express";
 import { RefundPaymentDto } from "../dto/refund-payment.dto";
 import { Auth } from "@common/decorators/auth.decorator";
 import { Role } from "@prisma-client/enums";
+import { SkipThrottle, Throttle } from "@nestjs/throttler";
 
 @ApiTags("Payments")
 @Controller("payments")
@@ -29,6 +30,7 @@ export class PaymentController {
   /**
    * Create a Razorpay payment order for a booking
    */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post("orders")
   @Auth()
   async createPaymentOrder(
@@ -41,6 +43,7 @@ export class PaymentController {
   /**
    * Verify client-side Razorpay payment signature
    */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post("verify")
   @Auth()
   async verifyPayment(
@@ -53,8 +56,10 @@ export class PaymentController {
   /**
    * Public webhook endpoint for Razorpay server events (No JWT)
    */
+  @SkipThrottle()
   @Post("webhook")
   @HttpCode(HttpStatus.OK)
+
   async handleRazorpayWebhook(
     @Req() req: Request,
     @Headers("x-razorpay-signature") signature: string,
