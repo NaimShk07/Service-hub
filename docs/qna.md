@@ -95,3 +95,7 @@ PostgreSQL cannot create GiST exclusion constraints on standard columns (like ti
 **Q: Why MUST database integration tests run with `--runInBand` in CI?**  
 **A:**  
 By default, Jest runs test files in parallel. If two concurrency tests run at the same millisecond against the same database, they will truncate each other's tables or cause deadlocks. `--runInBand` forces Jest to run test suites sequentially, ensuring 100% reliable, deterministic test passes.
+
+**Q: Why can tests pass locally with Prisma but fail in CI with `invalid input value for enum`?**  
+**A:**  
+Because new enum values were added to `schema.prisma` and applied locally via `prisma db push` or manual alteration, but no Prisma migration file was created. In CI, `prisma migrate deploy` executes only checked-in migration scripts. If a migration is missing, the clean database never gets the new enum values, causing runtime errors when queries insert them.
