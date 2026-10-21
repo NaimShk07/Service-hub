@@ -8,7 +8,12 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { BookingService } from "../services/booking.service";
 import { CreateBookingDto } from "../dto/create-booking.dto";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
@@ -19,6 +24,7 @@ import { Auth } from "@common/decorators/auth.decorator";
 import { Throttle } from "@nestjs/throttler";
 
 @ApiTags("Bookings")
+@ApiBearerAuth()
 @Controller("bookings")
 @Auth()
 export class BookingController {
@@ -29,13 +35,26 @@ export class BookingController {
    */
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post()
+  @ApiOperation({ summary: "Create a new booking reservation" })
+  @ApiResponse({
+    status: 201,
+    description: "Booking created in PENDING_PAYMENT status",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid booking request or interval",
+  })
+  @ApiResponse({
+    status: 409,
+    description: "Time slot conflict or provider unavailable",
+  })
+  @ApiResponse({ status: 429, description: "Rate limit exceeded" })
   async createBooking(
     @CurrentUser("userId") customerId: string,
     @Body() dto: CreateBookingDto,
   ) {
     return this.bookingService.createBooking(customerId, dto);
   }
-
 
   /**
    * Get my bookings (with status/date filters and pagination)

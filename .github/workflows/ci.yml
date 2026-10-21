@@ -1,0 +1,89 @@
+name: CI Pipeline & Quality Gate
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test-and-build:
+    name: Lint, Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: servicehub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      PORT: 8000
+      DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/servicehub_test?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      JWT_SECRET: ci-test-jwt-secret-key-32-chars-long!
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-key-32-chars-long!
+      JWT_REFRESH_EXPIRES_IN: 7d
+      RAZORPAY_KEY_ID: rzp_test_mock_ci_key
+      RAZORPAY_SECRET: mock_razorpay_secret_key_ci
+      RAZORPAY_WEBHOOK_SECRET: mock_webhook_secret_key_ci
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      CORS_CREDENTIALS: true
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🗄️ Generate Prisma Client
+        run: npx prisma generate
+
+      - name: 🔄 Run Database Migrations (including btree_gist extension)
+        run: npx prisma migrate deploy
+
+      - name: 🔍 Lint Code
+        run: npm run lint
+
+      - name: 🏷️ Typecheck Application
+        run: npx tsc -p tsconfig.build.json --noEmit
+
+      - name: 🧪 Run Unit Tests
+        run: npm run test
+
+      - name: 🚀 Run Integration & E2E Tests (in band)
+        run: npm run test:e2e -- --runInBand
+
+      - name: 🏗️ Verify Production Build
+        run: npm run build
