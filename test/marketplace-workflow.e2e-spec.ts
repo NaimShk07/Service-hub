@@ -24,7 +24,8 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
-  const webhookSecret = "rzp_test_webhook_secret";
+  const webhookSecret =
+    process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_test_webhook_secret";
 
   // State shared across steps of the journey
   let providerToken: string;

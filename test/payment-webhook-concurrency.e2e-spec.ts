@@ -21,7 +21,8 @@ describe("Day 7: Razorpay Webhook Concurrency, Tamper Guards & Refunds (e2e)", (
   let prisma: PrismaService;
   let jwtService: JwtService;
   let configService: ConfigService;
-  const webhookSecret = "rzp_test_webhook_secret";
+  const webhookSecret =
+    process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_test_webhook_secret";
 
   let testCustomer: any;
   let testAdmin: any;

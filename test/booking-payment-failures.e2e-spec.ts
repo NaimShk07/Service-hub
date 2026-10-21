@@ -27,7 +27,8 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
   let bookingService: BookingService;
   let paymentService: PaymentService;
 
-  const webhookSecret = "rzp_test_webhook_secret";
+  const webhookSecret =
+    process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_test_webhook_secret";
 
   // Fixtures
   let customer1Token: string;
