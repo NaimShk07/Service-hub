@@ -23,7 +23,6 @@ export class TransformInterceptor<T>
     context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<ApiResponse<T> | T> {
-
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse<ExpressResponse>();
     const statusCode = response.statusCode;
@@ -42,5 +41,4 @@ export class TransformInterceptor<T>
       })),
     );
   }
-
 }

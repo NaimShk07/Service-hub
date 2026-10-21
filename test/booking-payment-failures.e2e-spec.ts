@@ -47,7 +47,8 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
   let baseServiceId: string;
 
   const ts = Date.now();
-  const genPhone = () => `+91${Math.floor(7000000000 + Math.random() * 2000000000)}`;
+  const genPhone = () =>
+    `+91${Math.floor(7000000000 + Math.random() * 2000000000)}`;
 
   function createSignedWebhook(body: object) {
     const rawString = JSON.stringify(body);
@@ -238,44 +239,74 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
 
   afterAll(async () => {
     // Teardown created test records
-    await prisma.review.deleteMany({
-      where: { customerId: { in: [customer1Id, customer2Id] } },
-    }).catch(() => null);
+    await prisma.review
+      .deleteMany({
+        where: { customerId: { in: [customer1Id, customer2Id] } },
+      })
+      .catch(() => null);
 
-    await prisma.payment.deleteMany({
-      where: { booking: { customerId: { in: [customer1Id, customer2Id] } } },
-    }).catch(() => null);
+    await prisma.payment
+      .deleteMany({
+        where: { booking: { customerId: { in: [customer1Id, customer2Id] } } },
+      })
+      .catch(() => null);
 
-    await prisma.booking.deleteMany({
-      where: { customerId: { in: [customer1Id, customer2Id] } },
-    }).catch(() => null);
+    await prisma.booking
+      .deleteMany({
+        where: { customerId: { in: [customer1Id, customer2Id] } },
+      })
+      .catch(() => null);
 
-    await prisma.availability.deleteMany({
-      where: { providerId: { in: [activeProviderProfileId, suspendedProviderProfileId] } },
-    }).catch(() => null);
+    await prisma.availability
+      .deleteMany({
+        where: {
+          providerId: {
+            in: [activeProviderProfileId, suspendedProviderProfileId],
+          },
+        },
+      })
+      .catch(() => null);
 
-    await prisma.providerService.deleteMany({
-      where: { providerId: { in: [activeProviderProfileId, suspendedProviderProfileId] } },
-    }).catch(() => null);
+    await prisma.providerService
+      .deleteMany({
+        where: {
+          providerId: {
+            in: [activeProviderProfileId, suspendedProviderProfileId],
+          },
+        },
+      })
+      .catch(() => null);
 
-    await prisma.providerProfile.deleteMany({
-      where: { id: { in: [activeProviderProfileId, suspendedProviderProfileId] } },
-    }).catch(() => null);
+    await prisma.providerProfile
+      .deleteMany({
+        where: {
+          id: { in: [activeProviderProfileId, suspendedProviderProfileId] },
+        },
+      })
+      .catch(() => null);
 
     if (baseServiceId) {
-      await prisma.service.delete({ where: { id: baseServiceId } }).catch(() => null);
+      await prisma.service
+        .delete({ where: { id: baseServiceId } })
+        .catch(() => null);
     }
     if (categoryId) {
-      await prisma.category.delete({ where: { id: categoryId } }).catch(() => null);
+      await prisma.category
+        .delete({ where: { id: categoryId } })
+        .catch(() => null);
     }
 
-    await prisma.auditLog.deleteMany({
-      where: { actorUserId: { in: [customer1Id, customer2Id, adminId] } },
-    }).catch(() => null);
+    await prisma.auditLog
+      .deleteMany({
+        where: { actorUserId: { in: [customer1Id, customer2Id, adminId] } },
+      })
+      .catch(() => null);
 
-    await prisma.user.deleteMany({
-      where: { id: { in: [customer1Id, customer2Id, adminId] } },
-    }).catch(() => null);
+    await prisma.user
+      .deleteMany({
+        where: { id: { in: [customer1Id, customer2Id, adminId] } },
+      })
+      .catch(() => null);
 
     await prisma.$disconnect();
     await app.close();
@@ -317,7 +348,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
       expect(statuses).toEqual([201, 409]);
 
       const conflictRes = res1.status === 409 ? res1 : res2;
-      expect(conflictRes.body.message).toContain("time slot is no longer available");
+      expect(conflictRes.body.message).toContain(
+        "time slot is no longer available",
+      );
     });
 
     it("✓ Scenario 2: Service duration and buffer prevent overlapping bookings", async () => {
@@ -391,7 +424,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
           startsAt: slot.toISOString(),
         });
       expect(retryRes.status).toBe(201);
-      expect(retryRes.body.data.bookingStatus).toBe(BookingStatus.PENDING_PAYMENT);
+      expect(retryRes.body.data.bookingStatus).toBe(
+        BookingStatus.PENDING_PAYMENT,
+      );
     });
 
     it("✓ Scenario 4: Cancellation respects the two-hour policy", async () => {
@@ -414,7 +449,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
         .set("Authorization", `Bearer ${customer1Token}`)
         .send({ reason: "Change of plans" });
       expect(cancelSuccess.status).toBe(200);
-      expect(cancelSuccess.body.data.bookingStatus).toBe(BookingStatus.CANCELLED);
+      expect(cancelSuccess.body.data.bookingStatus).toBe(
+        BookingStatus.CANCELLED,
+      );
 
       // 4B: Booking scheduled in 30 minutes (< 2 hours) -> Cancellation blocked with 409
       const urgentDate = new Date();
@@ -444,7 +481,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
         .send({ reason: "Emergency cancellation" });
 
       expect(cancelDenied.status).toBe(409);
-      expect(cancelDenied.body.message).toContain("within 2 hours of the scheduled appointment time");
+      expect(cancelDenied.body.message).toContain(
+        "within 2 hours of the scheduled appointment time",
+      );
     });
 
     it("✓ Scenario 5: Suspended providers cannot receive new bookings", async () => {
@@ -538,7 +577,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
         .send(rawString);
       expect(res1.status).toBe(200);
 
-      const freshBooking = await prisma.booking.findUnique({ where: { id: booking.id } });
+      const freshBooking = await prisma.booking.findUnique({
+        where: { id: booking.id },
+      });
       expect(freshBooking?.bookingStatus).toBe(BookingStatus.CONFIRMED);
 
       // 2nd Duplicate Webhook delivery -> Idempotent no-op
@@ -580,12 +621,15 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
       expect(res.body.message).toContain("Invalid webhook signature");
 
       // Verify booking is still PENDING_PAYMENT
-      const bookingInDb = await prisma.booking.findUnique({ where: { id: booking.id } });
+      const bookingInDb = await prisma.booking.findUnique({
+        where: { id: booking.id },
+      });
       expect(bookingInDb?.bookingStatus).toBe(BookingStatus.PENDING_PAYMENT);
     });
 
     it("✓ Scenario 8: Incorrect amount or currency is rejected", async () => {
-      const { booking, payment, orderId } = await createTestBookingAndOrder(500.0); // Expecting 50000 paise
+      const { booking, payment, orderId } =
+        await createTestBookingAndOrder(500.0); // Expecting 50000 paise
 
       // Attacker tampers amount to 100 paise (₹1)
       const { rawString, signature } = createSignedWebhook({
@@ -614,10 +658,14 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
       expect(res.status).toBe(200);
 
       // Verify tampered amount/currency did NOT confirm booking or mark payment SUCCESS!
-      const bookingInDb = await prisma.booking.findUnique({ where: { id: booking.id } });
+      const bookingInDb = await prisma.booking.findUnique({
+        where: { id: booking.id },
+      });
       expect(bookingInDb?.bookingStatus).toBe(BookingStatus.PENDING_PAYMENT);
 
-      const paymentInDb = await prisma.payment.findUnique({ where: { id: payment.id } });
+      const paymentInDb = await prisma.payment.findUnique({
+        where: { id: payment.id },
+      });
       expect(paymentInDb?.status).not.toBe(PaymentStatus.SUCCESS);
     });
 
@@ -666,7 +714,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
         include: { payments: true },
       });
 
-      expect([BookingStatus.CONFIRMED, BookingStatus.EXPIRED]).toContain(finalBooking?.bookingStatus);
+      expect([BookingStatus.CONFIRMED, BookingStatus.EXPIRED]).toContain(
+        finalBooking?.bookingStatus,
+      );
       expect(finalBooking?.payments[0]?.status).toBe(PaymentStatus.SUCCESS);
 
       if (finalBooking?.bookingStatus === BookingStatus.EXPIRED) {
@@ -683,7 +733,8 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
     });
 
     it("✓ Scenario 10: Repeated refund requests cannot produce duplicate refunds", async () => {
-      const { booking, payment, orderId } = await createTestBookingAndOrder(500.0);
+      const { booking, payment, orderId } =
+        await createTestBookingAndOrder(500.0);
       const paymentId = `pay_refund_${Date.now()}`;
 
       // 1. Confirm payment first
@@ -709,7 +760,9 @@ describe("Day 3: Booking & Payment Failure Testing (e2e)", () => {
       expect(refundRes1.body.data.status).toBe(PaymentStatus.REFUNDED);
 
       // Verify in DB
-      const refundedPayment = await prisma.payment.findUnique({ where: { id: payment.id } });
+      const refundedPayment = await prisma.payment.findUnique({
+        where: { id: payment.id },
+      });
       expect(refundedPayment?.status).toBe(PaymentStatus.REFUNDED);
 
       // 3. Admin issues 2nd duplicate refund request -> Rejected (400 Bad Request)

@@ -8,4 +8,3 @@ export interface ProcessNoShowJobPayload {
   bookingId: string;
   requestId?: string;
 }
-

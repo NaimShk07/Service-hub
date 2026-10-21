@@ -91,7 +91,9 @@ describe("Observability, Request Correlation & Health Checks (e2e)", () => {
       expect(res.status).toBe(503);
       expect(res.body.status).toBe("error");
       expect(res.body.error.database.status).toBe("down");
-      expect(res.body.error.database.error).toContain("Connection terminated unexpectedly");
+      expect(res.body.error.database.error).toContain(
+        "Connection terminated unexpectedly",
+      );
     });
 
     it("GET /health/ready should remain 200 OK (degraded) when Redis is offline", async () => {
@@ -182,7 +184,8 @@ describe("Observability, Request Correlation & Health Checks (e2e)", () => {
     });
 
     it("should redact Bearer tokens inside raw log strings", () => {
-      const rawString = "User authenticated with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload";
+      const rawString =
+        "User authenticated with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload";
       const sanitized = sanitizeLogData(rawString);
 
       expect(sanitized).toBe("User authenticated with Bearer [REDACTED]");

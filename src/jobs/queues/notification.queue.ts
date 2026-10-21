@@ -68,7 +68,6 @@ export class NotificationQueueService {
         requestId: data.requestId || getRequestId(),
       },
       {
-
         delay: delayMs,
         jobId, // Custom jobId enforces deduplication if same notification is scheduled twice!
         ...DEFAULT_RETRY_POLICY,

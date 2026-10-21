@@ -45,7 +45,8 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
   let gatewayOrderId: string;
 
   const ts = Date.now();
-  const genPhone = () => `+91${Math.floor(7000000000 + Math.random() * 2000000000)}`;
+  const genPhone = () =>
+    `+91${Math.floor(7000000000 + Math.random() * 2000000000)}`;
 
   function createSignedWebhook(body: object) {
     const rawString = JSON.stringify(body);
@@ -87,59 +88,87 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
 
   afterAll(async () => {
     // Cleanup created data in reverse dependency order
-    const userIds = [providerUserId, adminUserId, customerUserId].filter(Boolean);
+    const userIds = [providerUserId, adminUserId, customerUserId].filter(
+      Boolean,
+    );
 
     if (userIds.length > 0) {
-      await prisma.review.deleteMany({
-        where: { customerId: customerUserId },
-      }).catch(() => null);
+      await prisma.review
+        .deleteMany({
+          where: { customerId: customerUserId },
+        })
+        .catch(() => null);
 
-      await prisma.payment.deleteMany({
-        where: { bookingId },
-      }).catch(() => null);
+      await prisma.payment
+        .deleteMany({
+          where: { bookingId },
+        })
+        .catch(() => null);
 
-      await prisma.booking.deleteMany({
-        where: { customerId: customerUserId },
-      }).catch(() => null);
+      await prisma.booking
+        .deleteMany({
+          where: { customerId: customerUserId },
+        })
+        .catch(() => null);
 
-      await prisma.availability.deleteMany({
-        where: { providerId: providerProfileId },
-      }).catch(() => null);
+      await prisma.availability
+        .deleteMany({
+          where: { providerId: providerProfileId },
+        })
+        .catch(() => null);
 
-      await prisma.providerService.deleteMany({
-        where: { providerId: providerProfileId },
-      }).catch(() => null);
+      await prisma.providerService
+        .deleteMany({
+          where: { providerId: providerProfileId },
+        })
+        .catch(() => null);
 
-      await prisma.providerDocument.deleteMany({
-        where: { providerId: providerProfileId },
-      }).catch(() => null);
+      await prisma.providerDocument
+        .deleteMany({
+          where: { providerId: providerProfileId },
+        })
+        .catch(() => null);
 
-      await prisma.providerLocation.deleteMany({
-        where: { providerId: providerProfileId },
-      }).catch(() => null);
+      await prisma.providerLocation
+        .deleteMany({
+          where: { providerId: providerProfileId },
+        })
+        .catch(() => null);
 
-      await prisma.providerProfile.deleteMany({
-        where: { id: providerProfileId },
-      }).catch(() => null);
+      await prisma.providerProfile
+        .deleteMany({
+          where: { id: providerProfileId },
+        })
+        .catch(() => null);
 
       if (serviceId) {
-        await prisma.service.delete({ where: { id: serviceId } }).catch(() => null);
+        await prisma.service
+          .delete({ where: { id: serviceId } })
+          .catch(() => null);
       }
       if (categoryId) {
-        await prisma.category.delete({ where: { id: categoryId } }).catch(() => null);
+        await prisma.category
+          .delete({ where: { id: categoryId } })
+          .catch(() => null);
       }
 
-      await prisma.auditLog.deleteMany({
-        where: { actorId: { in: userIds } },
-      }).catch(() => null);
+      await prisma.auditLog
+        .deleteMany({
+          where: { actorId: { in: userIds } },
+        })
+        .catch(() => null);
 
-      await prisma.notification.deleteMany({
-        where: { userId: { in: userIds } },
-      }).catch(() => null);
+      await prisma.notification
+        .deleteMany({
+          where: { userId: { in: userIds } },
+        })
+        .catch(() => null);
 
-      await prisma.user.deleteMany({
-        where: { id: { in: userIds } },
-      }).catch(() => null);
+      await prisma.user
+        .deleteMany({
+          where: { id: { in: userIds } },
+        })
+        .catch(() => null);
     }
 
     await prisma.$disconnect();
@@ -205,7 +234,8 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
         .set("Authorization", `Bearer ${providerToken}`)
         .send({
           businessName: "Ramesh Urban Electricals",
-          description: "Certified electrician with 8 years of home wiring experience",
+          description:
+            "Certified electrician with 8 years of home wiring experience",
           experienceYears: 8,
           addressLine1: "Shop 12, Link Road, Andheri West",
           city: "Mumbai",
@@ -226,7 +256,9 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.verificationStatus).toBe(VerificationStatus.VERIFIED);
+      expect(res.body.data.verificationStatus).toBe(
+        VerificationStatus.VERIFIED,
+      );
 
       // Verify in DB
       const profileInDb = await prisma.providerProfile.findUnique({
@@ -326,7 +358,9 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
 
       expect(offeringInDb).toBeDefined();
       expect(offeringInDb?.isActive).toBe(true);
-      expect(offeringInDb?.provider.verificationStatus).toBe(VerificationStatus.VERIFIED);
+      expect(offeringInDb?.provider.verificationStatus).toBe(
+        VerificationStatus.VERIFIED,
+      );
       expect(Number(offeringInDb?.price)).toBe(999.0);
     });
   });
@@ -450,7 +484,8 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
         .send({
           bookingId: bookingId,
           rating: 5,
-          comment: "Punctual, highly professional, solved my MCB tripping issue in minutes!",
+          comment:
+            "Punctual, highly professional, solved my MCB tripping issue in minutes!",
         });
 
       expect(res.status).toBe(201);
@@ -477,22 +512,23 @@ describe("Repeatable Marketplace Workflow Smoke Test (e2e)", () => {
     it("7.1 Audit trail records exist for critical lifecycle actions", async () => {
       const auditLogs = await prisma.auditLog.findMany({
         where: {
-          OR: [
-            { entityId: providerProfileId },
-            { entityId: bookingId },
-          ],
+          OR: [{ entityId: providerProfileId }, { entityId: bookingId }],
         },
       });
 
       expect(auditLogs.length).toBeGreaterThan(0);
 
       // Verify Provider Verification was audited
-      const verifyAudit = auditLogs.find((l) => l.action === AuditAction.PROVIDER_VERIFIED);
+      const verifyAudit = auditLogs.find(
+        (l) => l.action === AuditAction.PROVIDER_VERIFIED,
+      );
       expect(verifyAudit).toBeDefined();
       expect(verifyAudit?.actorUserId).toBe(adminUserId);
 
       // Verify Booking Completed was audited
-      const completionAudit = auditLogs.find((l) => l.action === AuditAction.BOOKING_COMPLETED);
+      const completionAudit = auditLogs.find(
+        (l) => l.action === AuditAction.BOOKING_COMPLETED,
+      );
       expect(completionAudit).toBeDefined();
       expect(completionAudit?.actorUserId).toBe(providerUserId);
     });

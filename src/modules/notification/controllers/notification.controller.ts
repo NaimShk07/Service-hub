@@ -45,5 +45,4 @@ export class NotificationController {
   ) {
     return await this.notificationService.markAsRead(id, userId);
   }
-
 }

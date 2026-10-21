@@ -50,7 +50,12 @@ export class BookingRepository extends BaseRepository {
         ? {
             bookingDate: {
               ...(fromDate && { gte: new Date(fromDate) }),
-              ...(toDate && { lte: new Date(toDate) }),
+              ...(toDate && {
+                lte:
+                  toDate.length === 10
+                    ? new Date(`${toDate}T23:59:59.999Z`)
+                    : new Date(toDate),
+              }),
             },
           }
         : {}),

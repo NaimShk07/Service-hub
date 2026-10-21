@@ -63,7 +63,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         path: request.url,
         method: request.method,
         requestId,
-        error: error || (exception instanceof Error ? exception.message : undefined),
+        error:
+          error || (exception instanceof Error ? exception.message : undefined),
       },
     );
 
@@ -89,7 +90,5 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: request.url,
       ...(requestId ? { requestId } : {}),
     });
-
   }
 }
-

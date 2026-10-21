@@ -78,10 +78,8 @@ export class HealthController {
           },
         };
       },
-
     ]);
   }
-
 
   /**
    * General health endpoint (backwards compatible alias to ready)

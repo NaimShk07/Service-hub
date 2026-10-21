@@ -102,7 +102,6 @@ export class BookingQueueService {
       BOOKING_JOBS.PROCESS_NO_SHOW,
       { bookingId, requestId: getRequestId() },
       {
-
         jobId,
         delay: delayMs,
         ...DEFAULT_RETRY_POLICY,

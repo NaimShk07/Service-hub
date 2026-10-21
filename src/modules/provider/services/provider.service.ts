@@ -202,7 +202,6 @@ export class ProviderService {
     return { filePath, mimeType };
   }
 
-
   async getPublicProfileById(providerId: string) {
     return await this.redisService.getOrSet(
       `provider:profile:${providerId}`,

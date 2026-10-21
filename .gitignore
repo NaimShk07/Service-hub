@@ -61,8 +61,7 @@ note.md
 PRD.md
 structure.md
 TODO.md
-todo.md
-docs/
+# docs/ (tracked for project runbooks and guides)
 
 # Temp & Runtime data
 .temp

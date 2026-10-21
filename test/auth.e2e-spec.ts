@@ -17,8 +17,10 @@ describe("Authentication & Session Reliability (e2e)", () => {
 
   const testUserIds: string[] = [];
 
-  const genEmail = () => `auth_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@servicehub.test`;
-  const genPhone = () => `+91${Math.floor(7000000000 + Math.random() * 2000000000)}`;
+  const genEmail = () =>
+    `auth_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@servicehub.test`;
+  const genPhone = () =>
+    `+91${Math.floor(7000000000 + Math.random() * 2000000000)}`;
 
   beforeAll(async () => {
     jest.spyOn(ThrottlerGuard.prototype, "canActivate").mockResolvedValue(true);
@@ -45,9 +47,11 @@ describe("Authentication & Session Reliability (e2e)", () => {
 
   afterAll(async () => {
     if (testUserIds.length > 0) {
-      await prisma.user.deleteMany({
-        where: { id: { in: testUserIds } },
-      }).catch(() => null);
+      await prisma.user
+        .deleteMany({
+          where: { id: { in: testUserIds } },
+        })
+        .catch(() => null);
     }
     await prisma.$disconnect();
     await app.close();
@@ -82,7 +86,9 @@ describe("Authentication & Session Reliability (e2e)", () => {
       // Verify httpOnly refreshToken cookie is set
       const cookies = res.headers["set-cookie"];
       expect(cookies).toBeDefined();
-      const hasRefreshCookie = cookies.some((c: string) => c.includes("refreshToken="));
+      const hasRefreshCookie = cookies.some((c: string) =>
+        c.includes("refreshToken="),
+      );
       expect(hasRefreshCookie).toBe(true);
     });
 
@@ -162,7 +168,9 @@ describe("Authentication & Session Reliability (e2e)", () => {
 
       const cookies = res.headers["set-cookie"];
       expect(cookies).toBeDefined();
-      expect(cookies.some((c: string) => c.includes("refreshToken="))).toBe(true);
+      expect(cookies.some((c: string) => c.includes("refreshToken="))).toBe(
+        true,
+      );
     });
 
     it("✓ Should reject login with wrong password (401 Unauthorized)", async () => {
@@ -222,8 +230,7 @@ describe("Authentication & Session Reliability (e2e)", () => {
     });
 
     it("✓ Should reject requests with missing Authorization header (401 Unauthorized)", async () => {
-      const res = await request(app.getHttpServer())
-        .get("/api/v1/auth/me");
+      const res = await request(app.getHttpServer()).get("/api/v1/auth/me");
 
       expect(res.status).toBe(401);
     });
@@ -231,7 +238,10 @@ describe("Authentication & Session Reliability (e2e)", () => {
     it("✓ Should reject requests with tampered or invalid JWT (401 Unauthorized)", async () => {
       const res = await request(app.getHttpServer())
         .get("/api/v1/auth/me")
-        .set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.tampered.signature");
+        .set(
+          "Authorization",
+          "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.tampered.signature",
+        );
 
       expect(res.status).toBe(401);
     });
@@ -258,7 +268,8 @@ describe("Authentication & Session Reliability (e2e)", () => {
       testUserIds.push(userId);
 
       const cookies = reg.headers["set-cookie"] as unknown as string[];
-      initialRefreshTokenCookie = cookies.find((c: string) => c.startsWith("refreshToken=")) || "";
+      initialRefreshTokenCookie =
+        cookies.find((c: string) => c.startsWith("refreshToken=")) || "";
     });
 
     it("✓ Should successfully refresh access token and rotate the refreshToken cookie", async () => {
@@ -272,13 +283,16 @@ describe("Authentication & Session Reliability (e2e)", () => {
       // Ensure rotated cookie was returned
       const newCookies = res.headers["set-cookie"] as unknown as string[];
       expect(newCookies).toBeDefined();
-      const rotatedCookie = newCookies.find((c: string) => c.startsWith("refreshToken="));
+      const rotatedCookie = newCookies.find((c: string) =>
+        c.startsWith("refreshToken="),
+      );
       expect(rotatedCookie).toBeDefined();
     });
 
     it("✓ Should reject refresh attempt without refresh token cookie (401 Unauthorized)", async () => {
-      const res = await request(app.getHttpServer())
-        .post("/api/v1/auth/refresh");
+      const res = await request(app.getHttpServer()).post(
+        "/api/v1/auth/refresh",
+      );
 
       expect(res.status).toBe(401);
     });

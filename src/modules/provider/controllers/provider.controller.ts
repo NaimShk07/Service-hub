@@ -31,7 +31,6 @@ import { QuerySlotDto } from "../dto/query-slot.dto";
 import { QueryProviderSearchDto } from "../dto/query-provider-search.dto";
 import { Auth } from "@common/decorators/auth.decorator";
 
-
 @ApiTags("Providers")
 @Controller("")
 export class ProviderController {
@@ -164,7 +163,6 @@ export class ProviderController {
   ) {
     return await this.providerService.getProviderDocumentsForAdmin(providerId);
   }
-
 
   /**
    * Get paginated summary list of verified providers

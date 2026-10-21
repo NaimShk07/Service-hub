@@ -12,4 +12,3 @@ export interface SendNotificationJobPayload {
   scheduledFor?: Date | string;
   requestId?: string;
 }
-

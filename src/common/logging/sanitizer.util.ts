@@ -52,7 +52,10 @@ export function sanitizeLogData(obj: any, depth = 0): any {
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(obj)) {
     const normalizedKey = key.toLowerCase().replace(/[-_]/g, "");
-    if (SENSITIVE_KEYS.has(key.toLowerCase()) || SENSITIVE_KEYS.has(normalizedKey)) {
+    if (
+      SENSITIVE_KEYS.has(key.toLowerCase()) ||
+      SENSITIVE_KEYS.has(normalizedKey)
+    ) {
       sanitized[key] = "[REDACTED]";
     } else if (typeof value === "object") {
       sanitized[key] = sanitizeLogData(value, depth + 1);
@@ -64,4 +67,3 @@ export function sanitizeLogData(obj: any, depth = 0): any {
   }
   return sanitized;
 }
-

@@ -52,7 +52,7 @@ export class AdminUserRepository extends BaseRepository {
     if (createdAt) {
       const lower = createdAt.toLowerCase();
       if (lower === "asc" || lower === "desc") {
-        orderBy = { createdAt: lower as "asc" | "desc" };
+        orderBy = { createdAt: lower };
       } else {
         const dateVal = new Date(createdAt);
         if (!isNaN(dateVal.getTime())) {

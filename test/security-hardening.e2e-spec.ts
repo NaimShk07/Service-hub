@@ -31,7 +31,6 @@ describe("Security & API Hardening Audit (e2e)", () => {
   let prisma: PrismaService;
   let storageService: StorageService;
 
-
   let customerToken: string;
   let otherCustomerToken: string;
   let adminToken: string;
@@ -79,7 +78,7 @@ describe("Security & API Hardening Audit (e2e)", () => {
       new LoggingInterceptor(),
     );
 
-    (app.getHttpAdapter().getInstance() as any).set("trust proxy", true);
+    app.getHttpAdapter().getInstance().set("trust proxy", true);
     await app.init();
     prisma = app.get(PrismaService);
     storageService = app.get(StorageService);
@@ -126,7 +125,6 @@ describe("Security & API Hardening Audit (e2e)", () => {
     providerToken = provRes.body.data.accessToken;
     providerUserId = provRes.body.data.user.id;
     testUserIds.push(providerUserId);
-
 
     const profileRes = await request(app.getHttpServer())
       .post("/api/v1/me/provider")
@@ -182,17 +180,23 @@ describe("Security & API Hardening Audit (e2e)", () => {
 
   afterAll(async () => {
     if (testUserIds.length > 0) {
-      await prisma.providerDocument.deleteMany({
-        where: { providerId: providerProfileId },
-      }).catch(() => null);
+      await prisma.providerDocument
+        .deleteMany({
+          where: { providerId: providerProfileId },
+        })
+        .catch(() => null);
 
-      await prisma.providerProfile.deleteMany({
-        where: { id: providerProfileId },
-      }).catch(() => null);
+      await prisma.providerProfile
+        .deleteMany({
+          where: { id: providerProfileId },
+        })
+        .catch(() => null);
 
-      await prisma.user.deleteMany({
-        where: { id: { in: testUserIds } },
-      }).catch(() => null);
+      await prisma.user
+        .deleteMany({
+          where: { id: { in: testUserIds } },
+        })
+        .catch(() => null);
     }
 
     await prisma.$disconnect();
@@ -274,7 +278,9 @@ describe("Security & API Hardening Audit (e2e)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
-      expect(JSON.stringify(res.body.message)).toContain("Validation failed (uuid is expected)");
+      expect(JSON.stringify(res.body.message)).toContain(
+        "Validation failed (uuid is expected)",
+      );
     });
   });
 
@@ -286,7 +292,9 @@ describe("Security & API Hardening Audit (e2e)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
-      expect(JSON.stringify(res.body.message)).toContain("limit must not be greater than");
+      expect(JSON.stringify(res.body.message)).toContain(
+        "limit must not be greater than",
+      );
     });
 
     it("should reject negative or zero page query parameter", async () => {
@@ -296,7 +304,9 @@ describe("Security & API Hardening Audit (e2e)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
-      expect(JSON.stringify(res.body.message)).toContain("page must not be less than 1");
+      expect(JSON.stringify(res.body.message)).toContain(
+        "page must not be less than 1",
+      );
     });
   });
 
@@ -354,13 +364,21 @@ describe("Security & API Hardening Audit (e2e)", () => {
         const mockHost = {
           switchToHttp: () => ({
             getResponse: () => ({ status: mockStatus }),
-            getRequest: () => ({ method: "POST", url: "/api/test", requestId: "req-sec-1" }),
+            getRequest: () => ({
+              method: "POST",
+              url: "/api/test",
+              requestId: "req-sec-1",
+            }),
           }),
         } as any;
 
         const p2002Err = new Prisma.PrismaClientKnownRequestError(
           "Unique constraint failed on the fields: (`email`)",
-          { code: "P2002", clientVersion: "7.0.0", meta: { target: ["email"] } },
+          {
+            code: "P2002",
+            clientVersion: "7.0.0",
+            meta: { target: ["email"] },
+          },
         );
         filter.catch(p2002Err, mockHost);
         expect(mockStatus).toHaveBeenCalledWith(409);
@@ -401,7 +419,9 @@ describe("Security & API Hardening Audit (e2e)", () => {
         .set("Authorization", `Bearer ${otherCustomerToken}`);
 
       expect(res.status).toBe(403);
-      expect(res.body.message).toContain("You do not have permission to access this document");
+      expect(res.body.message).toContain(
+        "You do not have permission to access this document",
+      );
     });
 
     it("should allow the document owner provider to download their document (200 OK)", async () => {
@@ -412,7 +432,9 @@ describe("Security & API Hardening Audit (e2e)", () => {
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toBe("application/pdf");
       expect(res.headers["x-content-type-options"]).toBe("nosniff");
-      expect(res.body.toString("utf8")).toContain("Mock confidential provider tax certificate");
+      expect(res.body.toString("utf8")).toContain(
+        "Mock confidential provider tax certificate",
+      );
     });
 
     it("should allow Admin to view and download any provider document (200 OK)", async () => {
@@ -422,7 +444,9 @@ describe("Security & API Hardening Audit (e2e)", () => {
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toBe("application/pdf");
-      expect(res.body.toString("utf8")).toContain("Mock confidential provider tax certificate");
+      expect(res.body.toString("utf8")).toContain(
+        "Mock confidential provider tax certificate",
+      );
     });
 
     it("should prevent path traversal attacks in LocalStorageService", () => {
@@ -434,7 +458,6 @@ describe("Security & API Hardening Audit (e2e)", () => {
         storageService.getFilePath("/uploads/../package.json");
       }).toThrow("path traversal detected");
     });
-
   });
 
   describe("7. Request Timeouts", () => {

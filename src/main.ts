@@ -100,8 +100,9 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`🚀 Application running on: http://localhost:${port}/api/v1`);
   if (!isProduction || swaggerEnabled) {
-    console.log(`📚 Swagger documentation at: http://localhost:${port}/api/docs`);
+    console.log(
+      `📚 Swagger documentation at: http://localhost:${port}/api/docs`,
+    );
   }
 }
 void bootstrap();
-

@@ -8,4 +8,3 @@ export abstract class StorageService {
 
   abstract getFilePath(fileUrl: string): string;
 }
-

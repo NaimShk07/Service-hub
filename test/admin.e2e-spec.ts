@@ -579,7 +579,7 @@ describe("Admin Platform Operations (e2e)", () => {
   describe("3. Admin Bookings (/api/v1/admin/bookings)", () => {
     it("✓ Should list platform-wide bookings including customer, provider, and payment summary", async () => {
       const res = await request(app.getHttpServer())
-        .get("/api/v1/admin/bookings?page=1&limit=50")
+        .get(`/api/v1/admin/bookings?customerId=${customerUser.id}`)
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
@@ -612,9 +612,6 @@ describe("Admin Platform Operations (e2e)", () => {
           `/api/v1/admin/bookings?status=${BookingStatus.CONFIRMED}&customerId=${testBooking.customerId}`,
         )
         .set("Authorization", `Bearer ${adminToken}`);
-
-
-
 
       expect(confirmedRes.status).toBe(200);
       const items = confirmedRes.body.data.data || confirmedRes.body.data.items;
@@ -665,7 +662,9 @@ describe("Admin Platform Operations (e2e)", () => {
 
     it("✓ Should filter bookings by paymentStatus", async () => {
       const successRes = await request(app.getHttpServer())
-        .get(`/api/v1/admin/bookings?paymentStatus=${PaymentStatus.SUCCESS}&customerId=${customerUser.id}`)
+        .get(
+          `/api/v1/admin/bookings?paymentStatus=${PaymentStatus.SUCCESS}&customerId=${customerUser.id}`,
+        )
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(successRes.status).toBe(200);
@@ -687,7 +686,9 @@ describe("Admin Platform Operations (e2e)", () => {
     it("✓ Should filter bookings by date range (dateFrom and dateTo)", async () => {
       const today = new Date().toISOString().split("T")[0];
       const res = await request(app.getHttpServer())
-        .get(`/api/v1/admin/bookings?dateFrom=${today}&dateTo=${today}`)
+        .get(
+          `/api/v1/admin/bookings?customerId=${customerUser.id}&dateFrom=${today}&dateTo=${today}`,
+        )
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
@@ -1276,8 +1277,12 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
       expect(items.length).toBeGreaterThanOrEqual(1);
-      expect(items.every((l: any) => l.action === AuditAction.PROVIDER_VERIFIED)).toBe(true);
-      expect(items.some((l: any) => l.entityId === pendingProviderProfile.id)).toBe(true);
+      expect(
+        items.every((l: any) => l.action === AuditAction.PROVIDER_VERIFIED),
+      ).toBe(true);
+      expect(
+        items.some((l: any) => l.entityId === pendingProviderProfile.id),
+      ).toBe(true);
     });
 
     it("✓ Should filter audit logs by action=PAYMENT_REFUNDED", async () => {
@@ -1288,7 +1293,9 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
       expect(items.length).toBeGreaterThanOrEqual(1);
-      expect(items.every((l: any) => l.action === AuditAction.PAYMENT_REFUNDED)).toBe(true);
+      expect(
+        items.every((l: any) => l.action === AuditAction.PAYMENT_REFUNDED),
+      ).toBe(true);
       expect(items.some((l: any) => l.entityId === testPayment.id)).toBe(true);
     });
 
@@ -1310,7 +1317,9 @@ describe("Admin Platform Operations (e2e)", () => {
       expect(res.status).toBe(200);
       const items = res.body.data.data || res.body.data.items;
       expect(items.length).toBeGreaterThanOrEqual(1);
-      expect(items.every((l: any) => l.actorUserId === adminUser.id)).toBe(true);
+      expect(items.every((l: any) => l.actorUserId === adminUser.id)).toBe(
+        true,
+      );
     });
 
     it("✓ Should filter audit logs by date range (dateFrom and dateTo)", async () => {

@@ -67,10 +67,11 @@ export class LocalStorageService implements StorageService {
 
     // Guard against directory traversal attacks
     if (!resolvedPath.startsWith(this.uploadRoot)) {
-      throw new BadRequestException("Invalid file path: path traversal detected");
+      throw new BadRequestException(
+        "Invalid file path: path traversal detected",
+      );
     }
 
     return resolvedPath;
   }
 }
-
