@@ -99,3 +99,37 @@ By default, Jest runs test files in parallel. If two concurrency tests run at th
 **Q: Why can tests pass locally with Prisma but fail in CI with `invalid input value for enum`?**  
 **A:**  
 Because new enum values were added to `schema.prisma` and applied locally via `prisma db push` or manual alteration, but no Prisma migration file was created. In CI, `prisma migrate deploy` executes only checked-in migration scripts. If a migration is missing, the clean database never gets the new enum values, causing runtime errors when queries insert them.
+
+---
+
+## Week 10 - Day 1: Dockerize the NestJS Application
+
+### 1. Multi-Stage Docker Builds
+
+**Q: What is a Multi-Stage Docker build, and why do we use it?**  
+**A:**  
+A multi-stage build uses two or more `FROM` statements:
+1. **Builder stage:** Installs TypeScript and build tools (`npm ci`), compiles the code (`npm run build`), and generates the Prisma client.
+2. **Runner stage:** Starts with a fresh, tiny Linux Alpine image and copies *only* the compiled JavaScript (`dist/`), production `node_modules`, and Prisma client.  
+It cuts image size from ~1.2 GB down to under 100 MB and keeps dev tools out of production.
+
+**Q: Why do we run `npm prune --omit=dev` before copying node_modules to the runner?**  
+**A:**  
+It removes all TypeScript, Jest, ESLint, and CLI development libraries from `node_modules`, ensuring only runtime dependencies are copied into the production container.
+
+---
+
+### 2. Security & Layer Caching
+
+**Q: Why shouldn't a container run as `root` user?**  
+**A:**  
+If a hacker exploits a vulnerability in an npm package or API endpoint, running as `root` gives them full administrator privileges inside the container. Switching to unprivileged `USER node` restricts what the attacker can execute.
+
+**Q: Why do we copy `package*.json` and `tsconfig*.json` before copying `src/`?**  
+**A:**  
+Docker caches layers from top to bottom. If you edit a TypeScript file in `src/`, Docker re-uses the cached `npm ci` layer instead of downloading hundreds of megabytes of npm packages again.
+
+**Q: Why must `@prisma/client` be in `dependencies` instead of `devDependencies`?**  
+**A:**  
+Because the compiled NestJS application calls `@prisma/client` at runtime to query the database. If it is in `devDependencies`, `npm prune --omit=dev` will delete it, causing `Cannot find module '@prisma/client'` crashes when the container boots.
+

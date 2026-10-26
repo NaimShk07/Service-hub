@@ -1,0 +1,34 @@
+# Dependency directories
+node_modules/
+
+# Build and generated outputs
+dist/
+generated/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Git metadata
+.git/
+.gitignore
+
+# Testing and coverage
+coverage/
+test/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS and Editor artifacts
+.DS_Store
+.vscode/
+.idea/
+.agents/
+
+# Documentation and scratch notes
+docs/
+*.md
