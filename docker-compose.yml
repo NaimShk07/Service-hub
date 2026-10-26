@@ -1,0 +1,151 @@
+services:
+  # ==============================================================================
+  # PostgreSQL 16 Database
+  # ==============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: servicehub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-servicehub}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-servicehub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - servicehub-network
+
+  # ==============================================================================
+  # Redis 7 (BullMQ Queue Backend & Cache)
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: servicehub-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - servicehub-network
+
+  # ==============================================================================
+  # One-Shot Database Migrations
+  # ==============================================================================
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: servicehub-app:latest
+    container_name: servicehub-migration
+    restart: "no"
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-servicehub}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - servicehub-network
+
+  # ==============================================================================
+  # NestJS HTTP API Service
+  # ==============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: servicehub-app:latest
+    container_name: servicehub-api
+    restart: unless-stopped
+    command: ["node", "dist/src/main.js"]
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-servicehub}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      JWT_SECRET: ${JWT_SECRET:-servicehub-dev-jwt-secret-key-32-chars-minimum}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-servicehub-dev-refresh-secret-key-32-chars}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_mock_id}
+      RAZORPAY_SECRET: ${RAZORPAY_SECRET:-rzp_test_mock_secret}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-rzp_test_mock_secret}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-rzp_test_webhook_secret}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      CORS_CREDENTIALS: ${CORS_CREDENTIALS:-true}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - servicehub-network
+
+  # ==============================================================================
+  # Standalone BullMQ Worker Service
+  # ==============================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: servicehub-app:latest
+    container_name: servicehub-worker
+    restart: unless-stopped
+    command: ["node", "dist/src/worker.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-servicehub}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      JWT_SECRET: ${JWT_SECRET:-servicehub-dev-jwt-secret-key-32-chars-minimum}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-servicehub-dev-refresh-secret-key-32-chars}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_mock_id}
+      RAZORPAY_SECRET: ${RAZORPAY_SECRET:-rzp_test_mock_secret}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-rzp_test_mock_secret}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-rzp_test_webhook_secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - servicehub-network
+
+# ==============================================================================
+# Persistent Named Volumes
+# ==============================================================================
+volumes:
+  postgres_data:
+    name: servicehub_postgres_data
+  redis_data:
+    name: servicehub_redis_data
+
+# ==============================================================================
+# Isolated Network
+# ==============================================================================
+networks:
+  servicehub-network:
+    name: servicehub_network
+    driver: bridge

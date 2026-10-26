@@ -133,3 +133,41 @@ Docker caches layers from top to bottom. If you edit a TypeScript file in `src/`
 **A:**  
 Because the compiled NestJS application calls `@prisma/client` at runtime to query the database. If it is in `devDependencies`, `npm prune --omit=dev` will delete it, causing `Cannot find module '@prisma/client'` crashes when the container boots.
 
+---
+
+## Week 10 - Day 2: Docker Compose Multi-Service Architecture
+
+### 1. Multi-Service Process Separation
+
+**Q: Why run the API and BullMQ worker in separate containers if they share the same Docker image?**  
+**A:**  
+The API handles user-facing HTTP requests and must stay responsive. The worker processes asynchronous background jobs (emails, reminders, booking expiration). Running them in separate containers ensures CPU or memory spikes in the background worker never starve or crash the API.
+
+**Q: Why do services communicate using Compose service names (`postgres`, `redis`) instead of `localhost`?**  
+**A:**  
+Each Docker container has its own isolated network namespace and loopback address. `localhost` inside a container points only to itself. Docker Compose creates a private bridge network with internal DNS, so containers resolve each other using their service names (`postgres:5432`, `redis:6379`).
+
+---
+
+### 2. Application Readiness & Health Checks
+
+**Q: Why is `depends_on` alone not enough to guarantee application readiness?**  
+**A:**  
+By default, `depends_on` only checks if the dependency container has *started*. A PostgreSQL or Redis container takes several seconds to initialize files and listen for connections. Using `depends_on` with `condition: service_healthy` ensures dependent containers only start once the database and Redis pass their healthcheck probes (`pg_isready` and `redis-cli ping`).
+
+**Q: Why run database migrations in a dedicated one-shot container before starting the API and worker?**  
+**A:**  
+If multiple API or worker containers start simultaneously and attempt to run `prisma migrate deploy`, they risk deadlocking or corrupting schema state. A dedicated `migration` container runs migrations once to completion (`condition: service_completed_successfully`), ensuring schema changes are applied before any application process queries the database.
+
+---
+
+### 3. Volume Persistence & Port Exposure
+
+**Q: What is the difference between `docker compose down` and `docker compose down -v`?**  
+**A:**  
+`docker compose down` stops and deletes containers and the network, but leaves named volumes (`servicehub_postgres_data`) intact so your database records persist. Adding the `-v` flag deletes the volumes as well, completely wiping all stored database data.
+
+**Q: Why should only necessary ports be exposed to the host machine?**  
+**A:**  
+Exposing ports on `0.0.0.0` opens attack surfaces and risks port conflicts with local daemons (such as a local PostgreSQL server already running on port 5432). Internal-only services like the BullMQ worker do not listen for incoming connections and should expose zero host ports. Database services can map to alternative host ports (e.g., `5433:5432`) for administrative debugging without colliding with host services.
+
