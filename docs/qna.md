@@ -171,3 +171,42 @@ If multiple API or worker containers start simultaneously and attempt to run `pr
 **A:**  
 Exposing ports on `0.0.0.0` opens attack surfaces and risks port conflicts with local daemons (such as a local PostgreSQL server already running on port 5432). Internal-only services like the BullMQ worker do not listen for incoming connections and should expose zero host ports. Database services can map to alternative host ports (e.g., `5433:5432`) for administrative debugging without colliding with host services.
 
+---
+
+## Week 10 - Day 3: Configuration & Database Migrations
+
+### 1. Environment Validation
+
+**Q: Why must environment variables be validated with a strict schema during bootstrap?**  
+**A:**  
+Without validation, a missing variable (like `DATABASE_URL` or `JWT_SECRET`) causes obscure runtime crashes minutes or hours after startup when a user hits an endpoint. A strict schema fails fast during bootstrap, printing an explicit list of missing or invalid variables and preventing the app from starting in a broken state.
+
+**Q: Why should security-sensitive secrets never have hardcoded default fallbacks?**  
+**A:**  
+If secrets fallback to defaults like `?? "defaultSecret"`, a misconfigured production deployment will run with known, public encryption keys. Attackers could forge JWT tokens and gain admin privileges. Secrets must be strictly required from the environment with zero fallback.
+
+---
+
+### 2. Controlled Database Migrations
+
+**Q: Why must migrations NOT run independently from every API and worker replica on startup?**  
+**A:**  
+In production, you often run 3 or 10 replicas of the API and worker. If all replicas attempt to run `prisma migrate deploy` simultaneously on boot, they will race, deadlock on database locks, or corrupt the `_prisma_migrations` table. Migrations must run as a single, isolated pre-deployment step (a one-shot release phase or migration container) before new application replicas start.
+
+---
+
+### 3. Zero-Downtime & Backward-Compatible Migrations
+
+**Q: What is the Expand/Contract pattern for zero-downtime database migrations?**  
+**A:**  
+It is a 3-step strategy to change database schemas without taking down the application:
+1. **Expand (Add first):** Add the new column/table as nullable or with a default value. Old application replicas continue working without interruption.
+2. **Deploy Code:** Deploy the new application code that writes to the new structure.
+3. **Contract (Remove later):** Once all old code versions are gone and all records are backfilled, apply a final migration to drop old columns or add `NOT NULL` constraints.
+
+**Q: How do you safely test database migrations and upgrades before releasing to production?**  
+**A:**  
+1. **Fresh Database Test:** Apply all migrations to an empty database to confirm clean table creation, index generation, and extension setup (`btree_gist`).
+2. **Existing Data Upgrade Test:** Seed existing production-like rows, apply schema updates, and assert that 100% of existing rows remain intact and queries return expected data.
+
+

@@ -4,6 +4,7 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { PrismaModule } from "./database/prisma/prisma.module";
 import { configs } from "./config/configuration";
+import { envValidationSchema } from "./config/env.validation";
 import { AuthModule } from "@modules/auth/auth.module";
 import { HealthModule } from "@modules/health/health.module";
 import { CatalogsModule } from "@modules/catalog/catalogs.module";
@@ -27,6 +28,11 @@ import { RequestIdMiddleware } from "@common/middleware/request-id.middleware";
     ConfigModule.forRoot({
       isGlobal: true,
       load: configs,
+      validationSchema: envValidationSchema,
+      validationOptions: {
+        abortEarly: false,
+        allowUnknown: true,
+      },
       ignoreEnvFile: process.env.NODE_ENV === "production",
       cache: true,
     }),
