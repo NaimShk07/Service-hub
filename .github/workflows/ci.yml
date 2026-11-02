@@ -114,7 +114,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 🧪 Smoke Test: Verify Production Image Excludes devDependencies
+      - name: "🧪 Smoke Test: Verify Production Image Excludes devDependencies"
         run: |
           echo "Checking that devDependencies (e.g. typescript) are excluded from production image..."
           docker run --rm servicehub-app:test node -e "
@@ -127,7 +127,7 @@ jobs:
             }
           "
 
-      - name: 🧪 Smoke Test: Verify Application Container & Health Endpoints
+      - name: "🧪 Smoke Test: Verify Application Container & Health Endpoints"
         run: |
           echo "Starting API container..."
           docker run -d --name smoke-api --network host \
@@ -168,7 +168,7 @@ jobs:
 
           docker stop smoke-api && docker rm smoke-api
 
-      - name: 🧪 Smoke Test: Verify BullMQ Worker Process
+      - name: "🧪 Smoke Test: Verify BullMQ Worker Process"
         run: |
           echo "Starting Worker container..."
           docker run -d --name smoke-worker --network host \
