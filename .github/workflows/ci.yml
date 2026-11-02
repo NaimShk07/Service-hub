@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ master, main ]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   test-and-build:
     name: Lint, Test & Build
@@ -88,3 +92,126 @@ jobs:
 
       - name: 🏗️ Verify Production Build
         run: npm run build
+
+      - name: 🏷️ Determine Docker Image Tags
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=ghcr.io/${REPO_LOWER}" >> $GITHUB_ENV
+          echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔨 Build Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.COMMIT_SHA }}
+            ${{ env.IMAGE_NAME }}:latest
+            servicehub-app:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🧪 Smoke Test: Verify Production Image Excludes devDependencies
+        run: |
+          echo "Checking that devDependencies (e.g. typescript) are excluded from production image..."
+          docker run --rm servicehub-app:test node -e "
+            try {
+              require('typescript');
+              console.error('❌ Security failure: devDependency typescript is present in production image');
+              process.exit(1);
+            } catch (err) {
+              console.log('✅ Confirmed: devDependencies are excluded from runner image');
+            }
+          "
+
+      - name: 🧪 Smoke Test: Verify Application Container & Health Endpoints
+        run: |
+          echo "Starting API container..."
+          docker run -d --name smoke-api --network host \
+            -e NODE_ENV=production \
+            -e PORT=8000 \
+            -e DATABASE_URL="postgresql://postgres:postgrespassword@127.0.0.1:5432/servicehub_test?schema=public" \
+            -e REDIS_HOST="127.0.0.1" \
+            -e REDIS_PORT="6379" \
+            -e REDIS_PASSWORD="" \
+            -e JWT_SECRET="ci-test-jwt-secret-key-32-chars-long!" \
+            -e JWT_REFRESH_SECRET="ci-test-refresh-secret-key-32-chars-long!" \
+            servicehub-app:test
+
+          echo "Waiting for API to become ready..."
+          READY=0
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:8000/health/live | grep -q '"status":"ok"'; then
+              echo "✅ /health/live is responding OK"
+              READY=1
+              break
+            fi
+            echo "Waiting for container startup (attempt $i/30)..."
+            sleep 2
+          done
+
+          if [ $READY -ne 1 ]; then
+            echo "❌ Container failed to start within 60s. Logs:"
+            docker logs smoke-api
+            exit 1
+          fi
+
+          echo "Verifying full readiness (/health/ready)..."
+          READY_RES=$(curl -s http://127.0.0.1:8000/health/ready)
+          echo "Readiness response: $READY_RES"
+          echo "$READY_RES" | grep -q '"database":{"status":"up"}' || (echo "❌ Database health check failed" && docker logs smoke-api && exit 1)
+          echo "$READY_RES" | grep -q '"redis":{"status":"up"' || (echo "❌ Redis health check failed" && docker logs smoke-api && exit 1)
+          echo "✅ Application container, Prisma client, and Redis connections verified!"
+
+          docker stop smoke-api && docker rm smoke-api
+
+      - name: 🧪 Smoke Test: Verify BullMQ Worker Process
+        run: |
+          echo "Starting Worker container..."
+          docker run -d --name smoke-worker --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_URL="postgresql://postgres:postgrespassword@127.0.0.1:5432/servicehub_test?schema=public" \
+            -e REDIS_HOST="127.0.0.1" \
+            -e REDIS_PORT="6379" \
+            -e REDIS_PASSWORD="" \
+            -e JWT_SECRET="ci-test-jwt-secret-key-32-chars-long!" \
+            -e JWT_REFRESH_SECRET="ci-test-refresh-secret-key-32-chars-long!" \
+            servicehub-app:test node dist/src/worker.js
+
+          echo "Waiting for worker to initialize..."
+          WORKER_READY=0
+          for i in {1..20}; do
+            if docker logs smoke-worker 2>&1 | grep -q "Worker started successfully"; then
+              echo "✅ Worker initialized and connected to queues"
+              WORKER_READY=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ $WORKER_READY -ne 1 ]; then
+            echo "❌ Worker failed to start. Logs:"
+            docker logs smoke-worker
+            exit 1
+          fi
+
+          docker stop smoke-worker && docker rm smoke-worker
+
+      - name: 🔐 Log in to GitHub Container Registry (GHCR)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🚀 Publish Versioned Docker Image to GHCR
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        run: |
+          echo "Publishing image with immutable commit SHA and latest tags:"
+          docker push ${{ env.IMAGE_NAME }}:${{ env.COMMIT_SHA }}
+          docker push ${{ env.IMAGE_NAME }}:latest
+          echo "✅ Published successfully to GHCR!"

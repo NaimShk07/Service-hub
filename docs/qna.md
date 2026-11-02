@@ -209,4 +209,39 @@ It is a 3-step strategy to change database schemas without taking down the appli
 1. **Fresh Database Test:** Apply all migrations to an empty database to confirm clean table creation, index generation, and extension setup (`btree_gist`).
 2. **Existing Data Upgrade Test:** Seed existing production-like rows, apply schema updates, and assert that 100% of existing rows remain intact and queries return expected data.
 
+---
+
+## Week 10 - Day 4: Production Build & Image Publishing
+
+### 1. Registries & Image Versioning
+
+**Q: What is a Container Registry (e.g. GitHub Container Registry / GHCR)?**  
+**A:**  
+A container registry is a centralized, secure storage service for built Docker images (just as GitHub stores source code and npm stores packages). It allows servers in any environment (staging, production, cloud) to pull and run exact application images without needing source code, compilers, or local dependencies.
+
+**Q: Why is tagging images with `latest` alone a dangerous production anti-pattern?**  
+**A:**  
+`latest` is mutable (it gets overwritten on every new build). If a bad build breaks production, you cannot easily identify what code is running or rollback to the previous version because the previous `latest` image was replaced.
+
+**Q: How do immutable version tags (commit SHAs) solve the rollback problem?**  
+**A:**  
+Tagging images with the git commit SHA (e.g., `servicehub:241a15e`) creates a permanent, immutable snapshot tied to the exact source code. If a release fails in production, you can instantly rollback by pointing your deployment back to the previous known-good commit SHA tag.
+
+---
+
+### 2. Container Verification & Security
+
+**Q: What is a "Container Smoke Test" in a CI pipeline, and why is `docker build` alone not enough?**  
+**A:**  
+`docker build` only verifies that files were copied and compilation succeeded; it does NOT verify that the app can actually boot and run. A smoke test starts the built container in CI and curls its health endpoint (`/health/ready`). It proves that:
+1. Node.js starts without missing runtime dependencies.
+2. The database connection (Prisma) works.
+3. The cache/queue connection (Redis) works.
+4. The background worker process can boot.
+
+**Q: Why should Pull Requests build and smoke test images, but never publish them to the registry?**  
+**A:**  
+Pull requests represent unmerged, potentially unapproved, or untested code changes. CI should build and smoke-test the image on PRs to verify the build will succeed, but only official merges into `master`/`main` should publish images to the production container registry.
+
+
 
