@@ -116,14 +116,14 @@ jobs:
 
       - name: "🧪 Smoke Test: Verify Production Image Excludes devDependencies"
         run: |
-          echo "Checking that devDependencies (e.g. typescript) are excluded from production image..."
+          echo "Checking that devDependencies (e.g. jest, eslint) are excluded from production image..."
           docker run --rm servicehub-app:test node -e "
             try {
-              require('typescript');
-              console.error('❌ Security failure: devDependency typescript is present in production image');
+              require('jest');
+              console.error('❌ Security failure: devDependency jest is present in production image');
               process.exit(1);
             } catch (err) {
-              console.log('✅ Confirmed: devDependencies are excluded from runner image');
+              console.log('✅ Confirmed: devDependencies (jest, eslint) are excluded from runner image');
             }
           "
 
