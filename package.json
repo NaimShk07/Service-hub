@@ -24,7 +24,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "test:db:lifecycle": "ts-node -r tsconfig-paths/register scripts/test-database-lifecycle.ts",
-    "test:smoke": "bash scripts/smoke-test.sh"
+    "test:smoke": "bash scripts/smoke-test.sh",
+    "test:smoke:post-deploy": "ts-node -r tsconfig-paths/register scripts/post-deploy-smoke-test.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^12.0.0",

@@ -257,6 +257,31 @@ An external URL routes traffic across the public internet, adding network latenc
 **A:**  
 They must run in a dedicated `preDeployCommand` (release phase). This spins up a single temporary container to run `npx prisma migrate deploy` before any new API or worker container starts. If the migration succeeds, new containers roll out; if it fails, the release aborts immediately without taking down the existing production system.
 
+---
+
+## Week 10 - Day 6: CI/CD, Deployment Safety & Rollbacks
+
+### 1. Post-Deployment Smoke Testing
+
+**Q: Why are post-deploy smoke tests necessary if tests already passed in CI?**  
+**A:**  
+CI tests run inside isolated runner containers against localhost mocks and test secrets. A post-deploy smoke test executes against the actual production environment, verifying that real DNS resolution, SSL/TLS certificates, CORS headers, platform environment variables, and VPC database network paths are functioning correctly from an external user's perspective.
+
+**Q: What safety rules must post-deployment smoke tests follow?**  
+**A:**  
+1. Never trigger real financial transactions (e.g. Razorpay capture).
+2. Never send actual notifications or emails to real customer contact addresses.
+3. Clean up any temporary smoke test data (e.g. test accounts) to avoid polluting production analytics.
+
+---
+
+### 2. Zero-Downtime Rollbacks
+
+**Q: Why should you almost never rollback database migrations during an emergency application rollback?**  
+**A:**  
+Rolling back a database migration (e.g., dropping columns or restoring a snapshot from hours ago) causes permanent data loss for any users who signed up or transacted since the deployment, locks active database tables, and causes immediate downtime. If migrations follow the backward-compatible Expand/Contract pattern, the previous application version will run safely with the expanded schema without altering the database.
+
+
 
 
 
