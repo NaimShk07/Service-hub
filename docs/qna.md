@@ -243,5 +243,20 @@ Tagging images with the git commit SHA (e.g., `servicehub:241a15e`) creates a pe
 **A:**  
 Pull requests represent unmerged, potentially unapproved, or untested code changes. CI should build and smoke-test the image on PRs to verify the build will succeed, but only official merges into `master`/`main` should publish images to the production container registry.
 
+---
+
+## Week 10 - Day 5: Deploy to a Public Environment
+
+### 1. Networking & Private Cloud Security
+
+**Q: Why must production backend containers use an Internal Database URL instead of an External Database URL?**  
+**A:**  
+An external URL routes traffic across the public internet, adding network latency, risking connection dropouts, incurring bandwidth egress charges, and exposing the database port to automated internet scanners. An internal URL connects over the provider's private virtual network (VPC) with sub-millisecond latency, zero egress cost, and total isolation from public internet attacks.
+
+**Q: Where should database migrations run in a managed container platform like Render?**  
+**A:**  
+They must run in a dedicated `preDeployCommand` (release phase). This spins up a single temporary container to run `npx prisma migrate deploy` before any new API or worker container starts. If the migration succeeds, new containers roll out; if it fails, the release aborts immediately without taking down the existing production system.
+
+
 
 

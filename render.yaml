@@ -1,0 +1,137 @@
+# ==============================================================================
+# ServiceHub Production Infrastructure Blueprint (Render.com)
+# ==============================================================================
+# Architecture:
+# - Web API: Public HTTPS, auto-migrates via preDeployCommand, health checked
+# - Worker: Dedicated BullMQ background job processor
+# - Database: Managed PostgreSQL 16 (internal private VPC)
+# - Redis: Managed Redis 7 for BullMQ & Caching (internal private VPC)
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. NestJS Public HTTP API (Web Service)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: servicehub-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: starter
+    branch: master
+    healthCheckPath: /health/ready
+    # Run migrations once in an isolated container BEFORE rolling out new replicas
+    preDeployCommand: npx prisma migrate deploy
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: NODE_ENV
+        value: production
+      # Internal VPC connection string (never exposed to public internet)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: servicehub-postgres
+          property: connectionString
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: servicehub-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: servicehub-redis
+          property: port
+      - key: REDIS_PASSWORD
+        value: ""
+      # Automatically generate strong, cryptographically secure 256-bit secrets
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      # Production CORS and observability
+      - key: CORS_ORIGINS
+        value: "https://servicehub-api.onrender.com"
+      - key: CORS_CREDENTIALS
+        value: "true"
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: LOG_FORMAT
+        value: "json"
+      # Third-party credentials (set securely in dashboard)
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_SECRET
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
+  # ----------------------------------------------------------------------------
+  # 2. BullMQ Standalone Background Worker
+  # ----------------------------------------------------------------------------
+  - type: worker
+    name: servicehub-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node dist/src/worker.js
+    region: oregon
+    plan: starter
+    branch: master
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: servicehub-postgres
+          property: connectionString
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: servicehub-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: servicehub-redis
+          property: port
+      - key: REDIS_PASSWORD
+        value: ""
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: servicehub-api
+          envVarKey: JWT_SECRET
+      - key: JWT_REFRESH_SECRET
+        fromService:
+          type: web
+          name: servicehub-api
+          envVarKey: JWT_REFRESH_SECRET
+
+  # ----------------------------------------------------------------------------
+  # 3. Managed Redis (Internal BullMQ & Cache)
+  # ----------------------------------------------------------------------------
+  - type: redis
+    name: servicehub-redis
+    region: oregon
+    plan: starter
+    # Restrict network: only accessible by services in the same Render private network
+    ipAllowList: []
+
+# ------------------------------------------------------------------------------
+# 4. Managed PostgreSQL 16 Database
+# ------------------------------------------------------------------------------
+databases:
+  - name: servicehub-postgres
+    databaseName: servicehub
+    user: servicehub_user
+    plan: starter
+    region: oregon
+    postgresMajorVersion: 16
+    ipAllowList: [] # Zero public access; internal VPC only
+
