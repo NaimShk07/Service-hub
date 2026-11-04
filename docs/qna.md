@@ -281,6 +281,25 @@ CI tests run inside isolated runner containers against localhost mocks and test 
 **A:**  
 Rolling back a database migration (e.g., dropping columns or restoring a snapshot from hours ago) causes permanent data loss for any users who signed up or transacted since the deployment, locks active database tables, and causes immediate downtime. If migrations follow the backward-compatible Expand/Contract pattern, the previous application version will run safely with the expanded schema without altering the database.
 
+---
+
+## Week 10 - Day 7: Production Verification, Recovery & Week 10 Completion
+
+### 1. Redis Cache vs. BullMQ Queue Persistence
+
+**Q: Why must Redis cache data and BullMQ queue data NOT be treated as interchangeable?**  
+**A:**  
+Cache data is ephemeral; if a cached query is evicted under memory pressure, the app simply queries PostgreSQL to re-cache it. In contrast, BullMQ queues hold business-critical work orders (booking expiration timers, reminders, payment fulfillment). If Redis drops queue keys, customer notifications and state transitions are permanently lost. A BullMQ Redis instance must enable disk persistence (AOF/RDB) and use a `noeviction` memory policy.
+
+---
+
+### 2. Readiness Behavior During Outages
+
+**Q: How should an API readiness endpoint (`/health/ready`) behave when PostgreSQL or Redis goes down?**  
+**A:**  
+It must return `HTTP 503 Service Unavailable` with `status: "down"` for the failed dependency. This informs cloud load balancers and container orchestrators to immediately stop sending user traffic to that replica until the dependency recovers, preventing customers from seeing broken pages and 500 errors.
+
+
 
 
 
